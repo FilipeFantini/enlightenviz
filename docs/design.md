@@ -245,11 +245,13 @@ Abandoning it is a recorded decision, not a failure to hide.
 
 ## 12. Open questions for the operator
 
-1. **Public now, or private until v0?** The repository was created private.
-2. **The abandonment date** in section 10.
-3. **Which dbt features enter v0:** none, `ref()` only, or `ref()` and
+1. **The abandonment date** in section 10.
+2. **Which dbt features enter v0:** none, `ref()` only, or `ref()` and
    contracts?
-4. **Rust or Go,** if the first slice in Rust takes more than its share.
+3. **Rust or Go,** if the first slice in Rust takes more than its share.
+
+**Settled — public from the start,** on 2026-11-12: the project is open source
+and so is its design. The license is Apache-2.0.
 
 **Settled — the name,** on 2026-11-12: `enlightenviz`. On that day the name was
 free on crates.io, PyPI, npm and GitHub, and `enlightenviz.com` and `.io` were

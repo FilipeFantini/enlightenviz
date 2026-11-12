@@ -9,5 +9,6 @@ database connection.
 security model, and the criteria by which the first version is judged or the
 project abandoned.
 
-Maintained by one person, with AI agents writing the code. Intended license:
-Apache-2.0, added with the first code.
+Maintained by one person, with AI agents writing the code.
+
+License: [Apache-2.0](LICENSE).
