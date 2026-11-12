@@ -1,4 +1,4 @@
-# enlighten (working name)
+# enlightenviz
 
 A small server that draws dashboards written as code: SQL and chart
 descriptions in Git, served with filters and live updates from a read-only

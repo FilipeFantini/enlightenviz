@@ -1,4 +1,4 @@
-# Design — enlighten (working name)
+# Design — enlightenviz
 
 **Status:** draft for the operator's review. No code is written before this
 document is approved.
@@ -245,13 +245,13 @@ Abandoning it is a recorded decision, not a failure to hide.
 
 ## 12. Open questions for the operator
 
-1. **The name.** No dashboard or BI product named Enlighten was found. But the
-   domain `enlighten.me` has been registered by someone else since 2009, the
-   package name `enlighten` is taken on PyPI (a progress-bar library) and on
-   npm, and free on crates.io. Enphase's solar monitoring product is also
-   called Enlighten. Keep the name without the domain, or choose another?
-2. **Public from the first commit, or private until v0?**
-3. **The abandonment date** in section 10.
-4. **Which dbt features enter v0:** none, `ref()` only, or `ref()` and
+1. **Public now, or private until v0?** The repository was created private.
+2. **The abandonment date** in section 10.
+3. **Which dbt features enter v0:** none, `ref()` only, or `ref()` and
    contracts?
-5. **Rust or Go,** if the first slice in Rust takes more than its share.
+4. **Rust or Go,** if the first slice in Rust takes more than its share.
+
+**Settled — the name,** on 2026-11-12: `enlightenviz`. On that day the name was
+free on crates.io, PyPI, npm and GitHub, and `enlightenviz.com` and `.io` were
+unregistered. `enlighten` alone was not: the domain `enlighten.me`, the PyPI
+and npm packages, and a solar monitoring product already use it.
