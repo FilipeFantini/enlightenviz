@@ -1,0 +1,19 @@
+board: param_declarations
+title: Parameter declarations
+queries:
+  a:
+    sql: select $from as d, $names as n, $flag as f
+    params:
+      from:
+        type: date
+        default: "2024-02-30"
+      names:
+        type: "list<text>"
+        max_items: 0
+      flag:
+        type: boolean
+        max_items: 3
+charts:
+  - title: A
+    query: a
+    vega_lite: {mark: point}

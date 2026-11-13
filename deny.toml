@@ -1,0 +1,29 @@
+# cargo-deny: what the dependency tree may contain. CI runs `cargo deny check`.
+
+[advisories]
+# A known vulnerability, or an unmaintained or yanked crate, fails the check.
+unmaintained = "all"
+yanked = "deny"
+ignore = []
+
+[licenses]
+# Permissive licenses only. A new dependency under another license fails the
+# check, and the license is added here by a decision, not by default.
+allow = [
+    "Apache-2.0",
+    "MIT",
+    "BSD-3-Clause",
+    "Unicode-3.0",
+    "Zlib", # foldhash, a hasher used by hashbrown
+]
+confidence-threshold = 0.9
+
+[bans]
+# Two versions of one crate are a cost in size, so they are listed, not hidden.
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

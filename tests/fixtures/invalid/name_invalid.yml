@@ -1,0 +1,11 @@
+board: "bad id"
+title: Names
+queries:
+  a:
+    sql: select 1 as one
+    params:
+      has space: {type: text}
+charts:
+  - title: A
+    query: a
+    vega_lite: {mark: point}

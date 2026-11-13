@@ -1,0 +1,185 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "enlightenviz board",
+  "description": "A dashboard: named queries, and charts that draw their results. One board\nis one YAML file.",
+  "type": "object",
+  "properties": {
+    "board": {
+      "description": "The id of the board; part of the URL of its queries. Unique across the\nboards directory. Letters, digits, `_` and `-`, starting with a letter\nor `_`, at most 63 characters.",
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,62}$"
+    },
+    "charts": {
+      "description": "The charts of the board, in the order they are shown. At least one.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Chart"
+      },
+      "minItems": 1
+    },
+    "queries": {
+      "description": "The queries of the board, by name. The name is part of the URL, and has\nthe same form as the id of a board.",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/Query"
+      },
+      "propertyNames": {
+        "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,62}$"
+      }
+    },
+    "text": {
+      "description": "Optional text shown under the title.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "title": {
+      "description": "The title shown above the board.",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "board",
+    "title",
+    "queries",
+    "charts"
+  ],
+  "$defs": {
+    "Chart": {
+      "description": "A chart: a Vega-Lite specification that draws the result of a query.",
+      "type": "object",
+      "properties": {
+        "query": {
+          "description": "The name of the query this chart draws; a key of `queries`.",
+          "type": "string"
+        },
+        "title": {
+          "description": "The title of the chart.",
+          "type": "string"
+        },
+        "vega_lite": {
+          "description": "A Vega-Lite specification, kept as it is. `validate` checks only that\nevery `field` it names is a column of the query, or is created by a\ntransform's `as`.",
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "query",
+        "vega_lite"
+      ]
+    },
+    "Param": {
+      "description": "The declaration of one parameter.",
+      "type": "object",
+      "properties": {
+        "default": {
+          "description": "The value used when a request gives none, of the declared type: a\nquoted string for `text` and `date`, a number for `integer` and\n`number`, `true` or `false` for `boolean`, and a YAML list of those for\nthe list types. A parameter without a default is required.",
+          "default": null
+        },
+        "max_items": {
+          "description": "For list types only: the most items a request may give. Default 100,\nat most 1000.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "default": null,
+          "maximum": 1000,
+          "minimum": 1
+        },
+        "type": {
+          "description": "The type of the value.",
+          "$ref": "#/$defs/ParamType"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ]
+    },
+    "ParamType": {
+      "description": "The type of a parameter.",
+      "oneOf": [
+        {
+          "description": "Any text, without a NUL character. Sent to Postgres as `text`.",
+          "type": "string",
+          "const": "text"
+        },
+        {
+          "description": "A whole number in the range of a 64-bit signed integer (`bigint`).",
+          "type": "string",
+          "const": "integer"
+        },
+        {
+          "description": "A finite number (`double precision`).",
+          "type": "string",
+          "const": "number"
+        },
+        {
+          "description": "`true` or `false`.",
+          "type": "string",
+          "const": "boolean"
+        },
+        {
+          "description": "A calendar date written `YYYY-MM-DD` (`date`).",
+          "type": "string",
+          "const": "date"
+        },
+        {
+          "description": "A list of `text`.",
+          "type": "string",
+          "const": "list<text>"
+        },
+        {
+          "description": "A list of `integer`.",
+          "type": "string",
+          "const": "list<integer>"
+        },
+        {
+          "description": "A list of `number`.",
+          "type": "string",
+          "const": "list<number>"
+        },
+        {
+          "description": "A list of `boolean`.",
+          "type": "string",
+          "const": "list<boolean>"
+        },
+        {
+          "description": "A list of `date`.",
+          "type": "string",
+          "const": "list<date>"
+        }
+      ]
+    },
+    "Query": {
+      "description": "One SQL query and the typed parameters it accepts.",
+      "type": "object",
+      "properties": {
+        "params": {
+          "description": "The parameters of the query, by name. A name has the form\n`[A-Za-z_][A-Za-z0-9_]*`, at most 63 characters.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Param"
+          },
+          "propertyNames": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,62}$"
+          }
+        },
+        "sql": {
+          "description": "One SQL statement, a `SELECT` or a `WITH ... SELECT`. Write a parameter\nas `$name`; every parameter declared in `params` must be used, and\nevery `$name` must be declared. Do not write `$1`. A single trailing\n`;` is allowed.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "sql"
+      ]
+    }
+  }
+}

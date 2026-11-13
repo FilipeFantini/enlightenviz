@@ -1,0 +1,12 @@
+board: chart_unknown_query
+title: Chart reads nothing
+queries:
+  a:
+    sql: select 1 as one
+charts:
+  - title: A
+    query: a
+    vega_lite: {mark: point}
+  - title: B
+    query: b
+    vega_lite: {mark: point}

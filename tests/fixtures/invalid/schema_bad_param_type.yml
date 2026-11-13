@@ -1,0 +1,12 @@
+board: schema_bad_param_type
+title: Bad type
+queries:
+  a:
+    sql: select $x as x
+    params:
+      x:
+        type: "list<list<text>>"
+charts:
+  - title: A
+    query: a
+    vega_lite: {mark: point}

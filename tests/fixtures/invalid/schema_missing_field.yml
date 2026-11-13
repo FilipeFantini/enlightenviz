@@ -1,0 +1,9 @@
+board: schema_missing_field
+title: Missing field
+queries:
+  a:
+    params: {}
+charts:
+  - title: A
+    query: a
+    vega_lite: {mark: point}

@@ -39,7 +39,7 @@ survey; section 11 says what reverses the decision.
   ceiling (section 10).
 - **Nothing leaves.** The server and the page make no request to any host the
   operator did not configure. No telemetry.
-- **Standards over inventions.** Vega-Lite for charts, the Postgres wire
+- **Standards over inventions.** An open chart library, the Postgres wire
   protocol for data, OpenID Connect for login, dbt's artifacts for lineage.
   This project is the thin layer between them.
 - **Written to be driven by an agent.** Every rule a board must follow is in a
@@ -47,6 +47,10 @@ survey; section 11 says what reverses the decision.
 - **Fail loudly.** A query that fails or returns nothing is an error state the
   visitor sees and the build catches, never an empty chart that looks like a
   zero.
+- **Beautiful and alive, by default.** The operator's requirement of
+  2026-11-13: a board looks finished without its author styling anything, and
+  it moves. A change of filter or a new row is an animated transition, not a
+  redraw. A few visuals done very well, not many done adequately.
 
 ## 3. Scope of v0
 
@@ -60,6 +64,10 @@ The first version does exactly this, and is judged on it (section 10).
   JSON, a query's updates as a stream, and health.
 - **Filters in the page:** a filter changes a parameter, the browser asks for
   the query again.
+- **A house theme:** type, colour (light and dark), spacing and motion come
+  with the tool and apply to every chart. Hover shows the value; a selection
+  in one chart can filter another. Each visual is reviewed as an image before
+  it is released, and the operator judges the look by eye.
 - **Live updates:** a chart may declare an interval or a Postgres notification
   channel; the server pushes new results over Server-Sent Events (one HTTP
   response kept open, which every browser and proxy already supports).
@@ -79,8 +87,8 @@ drift.
   (section 7).
 - No ad-hoc SQL from a visitor, and no SQL console.
 - No semantic layer. Metrics are defined upstream, in dbt.
-- No chart grammar of its own. If Vega-Lite cannot draw it, the board does not
-  have it.
+- No chart grammar of its own. If the chart library cannot draw it, the board
+  does not have it.
 - No transformation, scheduling or caching of data at rest. It reads what is
   served to it.
 - No write to any data source, ever.
@@ -93,7 +101,7 @@ drift.
 board.yml  --validate-->  server (read-only role)  -->  Postgres
                                |  page, JSON, event stream
                                v
-                           browser: Vega-Lite draws; filters set parameters
+                           browser: the chart library draws; filters set parameters
 ```
 
 1. At start, the server loads the boards and prepares each declared query. A
@@ -111,7 +119,8 @@ State: the server holds none between requests except its connection pool and
 its open streams. Boards come from the image or a mounted directory.
 
 **A sketch of a board,** to be settled by the schema in v0, not by this
-document:
+document (the first slice's schema already differs: it has no `source` or
+`refresh` yet, and `docs/boards.md` is the format that is true):
 
 ```yaml
 board: earthquakes
@@ -203,7 +212,7 @@ choice recorded.
 | Piece | Candidate | Why |
 |---|---|---|
 | Server | Rust | One static binary, no runtime, resident memory in the tens of MiB, memory safety checked by the compiler, which also checks an agent's code before it runs. Go is the alternative if Rust slows the work. |
-| Charts | Vega-Lite, drawn in the browser | An open, declarative grammar with a published schema; agents write it well. Served from the binary, not from a CDN. |
+| Charts | Vega-Lite or Apache ECharts, drawn in the browser; **chosen by eye** | Vega-Lite is an open, declarative grammar with a published schema, which agents write and `validate` checks well; its animation is believed weak. ECharts animates transitions and live updates by default and is harder to validate. The slice that adds the page draws the earthquakes board in both, with the house theme and a live update, and the operator picks from the result. The first slice keeps a chart's specification opaque, under the key `vega_lite`, which is renamed if ECharts wins. Either is served from the binary, not from a CDN. |
 | First source | Postgres wire protocol | Covers Postgres and the databases that speak it. |
 | Later sources | ADBC, an embedded DuckDB | Open standards that reach warehouses and files without a connector written here. Not in v0. |
 | Live updates | Server-Sent Events | Plain HTTP; no second protocol for proxies to carry. |
@@ -240,8 +249,10 @@ Abandoning it is a recorded decision, not a failure to hide.
   states. v0 does them plainly, and they are reviewed by eye.
 - **One maintainer.** A security fix depends on one person and their agents.
   Stated in the README until it stops being true.
-- **Vega-Lite's weight in the browser** (about 1 MB of script, to be measured)
-  on a slow connection.
+- **The chart library's weight in the browser** (about 1 MB of script for
+  either candidate, to be measured) on a slow connection.
+- **"Beautiful" has no test.** It is judged by the operator, by eye; images of
+  each visual are kept so that a change in the look is seen in review.
 - **Streaming at scale is untested.** v0 targets few events at high frequency
   and tens of viewers, not thousands of open streams.
 

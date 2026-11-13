@@ -1,0 +1,91 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Every job only reads the repository. Nothing here can push, publish or
+# change a setting.
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust:
+    name: format, lint, test
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:18.7-alpine3.24@sha256:75dcac3dfb1cd01ca3536910bbc84128759362f8b118bf8c55b38a94f68f3b73
+        env:
+          # A throwaway password for a database that lives as long as this job.
+          POSTGRES_PASSWORD: ci-only-throwaway
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      ENLIGHTENVIZ_TEST_DATABASE_URL: postgres://postgres:ci-only-throwaway@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # rustup reads rust-toolchain.toml and installs that exact Rust, with
+      # rustfmt and clippy, the first time cargo runs.
+      - name: Format
+        run: cargo fmt --check
+      - name: Lint
+        run: cargo clippy --all-targets --locked -- -D warnings
+      - name: Test
+        run: cargo test --locked
+
+  deny:
+    name: dependencies
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Advisories, licenses, bans and sources, as set in deny.toml.
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          command: check
+
+  secrets:
+    name: secret scan
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the scan reads the whole history
+          persist-credentials: false
+      - name: gitleaks
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/repo" \
+            ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f \
+            git /repo --no-banner --redact --verbose
+
+  image:
+    name: container image
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: The Dockerfile uses the Rust version of rust-toolchain.toml
+        run: |
+          channel="$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)"
+          grep -q "^FROM rust:${channel}-alpine" Dockerfile
+      - name: Build
+        run: docker build -t enlightenviz-image:ci .
+      - name: It starts with no libraries, as a non-root user
+        run: |
+          docker run --rm enlightenviz-image:ci --version
+          test "$(docker image inspect enlightenviz-image:ci --format '{{.Config.User}}')" = "65532:65532"
+          docker image ls enlightenviz-image:ci

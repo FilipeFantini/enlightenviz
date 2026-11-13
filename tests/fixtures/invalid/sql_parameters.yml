@@ -1,0 +1,17 @@
+board: sql_parameters
+title: SQL parameters
+queries:
+  undeclared:
+    sql: |
+      select 1 as one
+      where x = $missing
+  unused:
+    sql: select 1 as one
+    params:
+      never_used: {type: text}
+  positional:
+    sql: select $1 as one
+charts:
+  - title: A
+    query: unused
+    vega_lite: {mark: point}
