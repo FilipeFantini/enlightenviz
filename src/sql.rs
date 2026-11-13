@@ -10,7 +10,7 @@
 //! strings. It assumes `standard_conforming_strings = on`, the default since
 //! Postgres 9.1.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use crate::param::ParamType;
 
@@ -43,26 +43,65 @@ pub struct SqlError {
     pub line: usize,
 }
 
+/// The most problems of the kinds that can repeat (an undeclared name, a
+/// positional parameter) that are kept for one query. A person, or an agent,
+/// fixes the first ones and runs again; 50 is more than fits on a screen, and
+/// the cap keeps the memory and the output bounded however large the file is.
+/// What is not kept is counted, so the cut is never silent.
+pub const MAX_ERRORS: usize = 50;
+
+/// Why a query was refused: the problems found, and how many more of the
+/// repeating kinds were found and not kept.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Failure {
+    pub errors: Vec<SqlError>,
+    pub omitted: usize,
+}
+
+/// Where each line of a text starts, found once, so that the line of an offset
+/// is a binary search instead of a scan from the start of the text.
+struct Lines {
+    newlines: Vec<usize>,
+}
+
+impl Lines {
+    fn new(text: &str) -> Lines {
+        Lines {
+            newlines: text
+                .bytes()
+                .enumerate()
+                .filter(|(_, b)| *b == b'\n')
+                .map(|(i, _)| i)
+                .collect(),
+        }
+    }
+
+    /// The line, from 1, that holds byte `offset`.
+    fn line_at(&self, offset: usize) -> usize {
+        self.newlines.partition_point(|newline| *newline < offset) + 1
+    }
+}
+
 fn is_ident_byte(b: u8) -> bool {
     b.is_ascii_alphanumeric() || b == b'_' || b >= 0x80
 }
 
 /// Rewrites `sql`. A single trailing `;` is dropped.
-pub fn rewrite(
-    sql: &str,
-    declared: &BTreeMap<String, ParamType>,
-) -> Result<Rewritten, Vec<SqlError>> {
+pub fn rewrite(sql: &str, declared: &BTreeMap<String, ParamType>) -> Result<Rewritten, Failure> {
     let b = sql.as_bytes();
     let n = b.len();
     let mut out = String::with_capacity(sql.len() + 16);
     let mut order: Vec<String> = Vec::new();
+    let mut positions: HashMap<&str, usize> = HashMap::new(); // name -> position
     let mut errors: Vec<SqlError> = Vec::new();
+    let mut omitted = 0;
     let mut flushed = 0; // sql[..flushed] is already in `out`
     let mut i = 0;
     let mut significant = false;
     let mut semicolon: Option<usize> = None; // offset of a `;` seen earlier
     let mut semicolon_reported = false;
-    let line_at = |offset: usize| sql[..offset].bytes().filter(|c| *c == b'\n').count() + 1;
+    let lines = Lines::new(sql);
+    let line_at = |offset: usize| lines.line_at(offset);
 
     // Something that is not whitespace or a comment starts here: a `;` seen
     // earlier was not the last thing in the query.
@@ -77,6 +116,19 @@ pub fn rewrite(
                         line: line_at(semi),
                     });
                 }
+            }
+        }};
+    }
+    // A problem that can repeat as often as the query is long.
+    macro_rules! repeating {
+        ($problem:expr, $at:expr) => {{
+            if errors.len() < MAX_ERRORS {
+                errors.push(SqlError {
+                    problem: $problem,
+                    line: line_at($at),
+                });
+            } else {
+                omitted += 1;
             }
         }};
     }
@@ -191,19 +243,13 @@ pub fn rewrite(
                 } else if tag.is_empty() {
                     i += 1; // a lone `$`: Postgres will report it
                 } else if starts_with_digit {
-                    errors.push(SqlError {
-                        problem: Problem::Positional(tag.to_string()),
-                        line: line_at(start),
-                    });
+                    repeating!(Problem::Positional(tag.to_string()), start);
                     i = j;
                 } else if declared.contains_key(tag) {
-                    let position = match order.iter().position(|name| name == tag) {
-                        Some(index) => index + 1,
-                        None => {
-                            order.push(tag.to_string());
-                            order.len()
-                        }
-                    };
+                    let position = *positions.entry(tag).or_insert_with(|| {
+                        order.push(tag.to_string());
+                        order.len()
+                    });
                     // `declared.contains_key` was true, so the type is there.
                     if let Some(ty) = declared.get(tag) {
                         out.push_str(&sql[flushed..start]);
@@ -212,10 +258,7 @@ pub fn rewrite(
                     }
                     i = j;
                 } else {
-                    errors.push(SqlError {
-                        problem: Problem::Undeclared(tag.to_string()),
-                        line: line_at(start),
-                    });
+                    repeating!(Problem::Undeclared(tag.to_string()), start);
                     i = j;
                 }
             }
@@ -233,7 +276,7 @@ pub fn rewrite(
         });
     }
     if !errors.is_empty() {
-        return Err(errors);
+        return Err(Failure { errors, omitted });
     }
     out.push_str(&sql[flushed..]);
     Ok(Rewritten { sql: out, order })
@@ -255,6 +298,7 @@ mod tests {
     fn problems(sql: &str, names: &[(&str, ParamType)]) -> Vec<(Problem, usize)> {
         rewrite(sql, &declared(names))
             .unwrap_err()
+            .errors
             .into_iter()
             .map(|e| (e.problem, e.line))
             .collect()
@@ -466,5 +510,66 @@ mod tests {
     #[test]
     fn a_lone_dollar_is_left_for_postgres_to_report() {
         assert_eq!(ok("select $ 1", &[]).sql, "select $ 1");
+    }
+
+    #[test]
+    fn lines_are_found_for_every_offset_of_a_large_text() {
+        // 200,000 lines. A scan from the start for each offset would read
+        // about 10^11 bytes; the index reads the text once. The bound is
+        // generous: it only catches that quadratic cost, not a slow machine.
+        let text = "ab\n".repeat(200_000);
+        let started = std::time::Instant::now();
+        let lines = Lines::new(&text);
+        for line in 0..200_000 {
+            assert_eq!(lines.line_at(line * 3), line + 1);
+            assert_eq!(lines.line_at(line * 3 + 1), line + 1);
+            assert_eq!(lines.line_at(line * 3 + 2), line + 1); // the newline itself
+            if line % 1000 == 0 {
+                assert!(
+                    started.elapsed() < std::time::Duration::from_secs(20),
+                    "line {line}: too slow"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn many_errors_are_capped_counted_and_still_on_the_right_lines() {
+        // One undeclared name a line, 300,000 lines.
+        let sql = "$x\n".repeat(300_000);
+        let started = std::time::Instant::now();
+        let failure = rewrite(&sql, &BTreeMap::new()).unwrap_err();
+        assert!(started.elapsed() < std::time::Duration::from_secs(20));
+        assert_eq!(failure.errors.len(), MAX_ERRORS);
+        assert_eq!(failure.omitted, 300_000 - MAX_ERRORS);
+        for (index, e) in failure.errors.iter().enumerate() {
+            assert_eq!(e.problem, Problem::Undeclared("x".to_string()));
+            assert_eq!(e.line, index + 1);
+        }
+    }
+
+    #[test]
+    fn fewer_errors_than_the_cap_are_all_kept() {
+        let sql = "$x\n".repeat(MAX_ERRORS);
+        let failure = rewrite(&sql, &BTreeMap::new()).unwrap_err();
+        assert_eq!((failure.errors.len(), failure.omitted), (MAX_ERRORS, 0));
+    }
+
+    #[test]
+    fn many_distinct_parameters_keep_their_order() {
+        let names: Vec<String> = (0..20_000).map(|i| format!("p{i}")).collect();
+        let declared: BTreeMap<String, ParamType> = names
+            .iter()
+            .map(|n| (n.clone(), ParamType::Integer))
+            .collect();
+        let sql = names
+            .iter()
+            .rev()
+            .map(|n| format!("${n}"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let r = rewrite(&sql, &declared).unwrap();
+        let reversed: Vec<String> = names.iter().rev().cloned().collect();
+        assert_eq!(r.order, reversed);
     }
 }

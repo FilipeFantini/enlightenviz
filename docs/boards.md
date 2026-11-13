@@ -198,6 +198,7 @@ reported at the `sql` key, with the line within the query in the message.
 | `sql-positional-param` | The SQL uses `$1`. |
 | `sql-unterminated` | A string, identifier, comment or dollar quote never closes. |
 | `sql-multiple-statements` | A `;` is followed by more SQL. |
+| `sql-errors-truncated` | A query has more than 50 repeated SQL problems (undeclared names, `$1`); the first 50 are listed and this says how many were not. Fix them and run again. |
 | `sql-empty` | The SQL holds only whitespace and comments. |
 | `boards-dir-unreadable`, `boards-dir-empty`, `file-unreadable`, `file-too-large` | The directory or a file cannot be used. |
 | `database-unreachable` | (With a database) no connection could be made. |

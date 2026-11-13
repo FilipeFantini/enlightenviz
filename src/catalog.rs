@@ -5,7 +5,7 @@
 //! Every problem found is a [`Diagnostic`], and every board is checked even
 //! when another one failed, so that one run reports as much as it can.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::io::Read;
 use std::path::Path;
@@ -338,14 +338,28 @@ fn compile_query(
     let sql_line = doc.line(&child(at, "sql"));
     let rewritten = match sql::rewrite(&query.sql, &types) {
         Ok(rewritten) => rewritten,
-        Err(errors) => {
-            for e in errors {
+        Err(failure) => {
+            for e in failure.errors {
                 diagnostics.push(sql_diagnostic(file, sql_line, e));
+            }
+            if failure.omitted > 0 {
+                diagnostics.push(Diagnostic::new(
+                    file,
+                    sql_line,
+                    "sql-errors-truncated",
+                    format!(
+                        "{} more problems in this query are not shown; the first {} are listed",
+                        failure.omitted,
+                        sql::MAX_ERRORS
+                    ),
+                    "fix the problems shown and run again; the rest will then be listed",
+                ));
             }
             return None;
         }
     };
-    for name in types.keys().filter(|n| !rewritten.order.contains(n)) {
+    let used: HashSet<&String> = rewritten.order.iter().collect();
+    for name in types.keys().filter(|n| !used.contains(n)) {
         diagnostics.push(Diagnostic::new(
             file,
             doc.line(&child(&params_at, name)),

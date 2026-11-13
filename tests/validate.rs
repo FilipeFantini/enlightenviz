@@ -125,3 +125,41 @@ fn a_directory_without_boards_is_an_error() {
     assert_eq!(diagnostics.len(), 1);
     assert_eq!(diagnostics[0].rule, "boards-dir-empty");
 }
+
+#[test]
+fn a_huge_number_of_sql_errors_is_reported_quickly_capped_and_said_so() {
+    // A 900 KB query that is one undeclared name 300,000 times.
+    let dir = std::env::temp_dir().join(format!("enlightenviz-many-errors-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let sql = format!("select {}", "$a ".repeat(300_000));
+    let board = format!(
+        "board: many\ntitle: Many errors\nqueries:\n  q:\n    sql: |\n      {sql}\ncharts:\n  - title: C\n    query: q\n    vega_lite: {{mark: point}}\n"
+    );
+    std::fs::write(dir.join("many.yml"), board).unwrap();
+
+    let started = std::time::Instant::now();
+    let (_, diagnostics) = load_dir(&dir);
+    let elapsed = started.elapsed();
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert!(
+        elapsed < std::time::Duration::from_secs(30),
+        "took {elapsed:?}"
+    );
+    let undeclared = diagnostics
+        .iter()
+        .filter(|d| d.rule == "sql-undeclared-param")
+        .count();
+    assert_eq!(undeclared, enlightenviz::sql::MAX_ERRORS);
+    let truncated: Vec<_> = diagnostics
+        .iter()
+        .filter(|d| d.rule == "sql-errors-truncated")
+        .collect();
+    assert_eq!(truncated.len(), 1, "the cut must be reported once");
+    assert!(
+        truncated[0].message.contains("299950 more problems"),
+        "{}",
+        truncated[0]
+    );
+    assert_eq!(diagnostics.len(), enlightenviz::sql::MAX_ERRORS + 1);
+}
