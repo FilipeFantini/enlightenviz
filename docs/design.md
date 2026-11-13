@@ -1,7 +1,7 @@
 # Design — enlightenviz
 
-**Status:** draft for the operator's review. No code is written before this
-document is approved.
+**Status:** approved by the operator on 2026-11-13. A change to sections 3, 4
+or 10 is a new decision of the operator's, not an edit.
 
 **Date:** 2026-11-12
 
@@ -164,7 +164,9 @@ are read; nothing depends on a dbt engine.
   reads.
 
 All four are optional: a board over a plain Postgres database needs no dbt.
-Which of them enter v0 is an open question (section 12).
+**None of them is in v0:** its criteria (section 10) are met over plain
+Postgres tables, and each one adds a way to fail before the server is proven.
+`ref()` and contracts are the first work after v0.
 
 ## 8. Security
 
@@ -224,7 +226,7 @@ choice recorded.
 **The project is abandoned, and Lagom returns to its static page, when** any of
 these is true:
 
-- v0 is not done by **2026-12-20** (proposed; the operator sets the date);
+- v0 is not done by **2026-12-20**;
 - criterion 4 or 5 cannot be met without a redesign;
 - an existing tool is found that covers the five requirements of section 1.
 
@@ -243,17 +245,15 @@ Abandoning it is a recorded decision, not a failure to hide.
 - **Streaming at scale is untested.** v0 targets few events at high frequency
   and tens of viewers, not thousands of open streams.
 
-## 12. Open questions for the operator
+## 12. Settled
 
-1. **The abandonment date** in section 10.
-2. **Which dbt features enter v0:** none, `ref()` only, or `ref()` and
-   contracts?
-3. **Rust or Go,** if the first slice in Rust takes more than its share.
-
-**Settled — public from the start,** on 2026-11-12: the project is open source
-and so is its design. The license is Apache-2.0.
-
-**Settled — the name,** on 2026-11-12: `enlightenviz`. On that day the name was
-free on crates.io, PyPI, npm and GitHub, and `enlightenviz.com` and `.io` were
-unregistered. `enlighten` alone was not: the domain `enlighten.me`, the PyPI
-and npm packages, and a solar monitoring product already use it.
+- **The name,** 2026-11-12: `enlightenviz`. On that day the name was free on
+  crates.io, PyPI, npm and GitHub, and `enlightenviz.com` and `.io` were
+  unregistered. `enlighten` alone was not: the domain `enlighten.me`, the PyPI
+  and npm packages, and a solar monitoring product already use it.
+- **Public from the start,** 2026-11-12: the project is open source and so is
+  its design. The license is Apache-2.0.
+- **The abandonment date,** 2026-11-13: 2026-12-20 (section 10).
+- **dbt in v0,** 2026-11-13: none (section 7).
+- **Rust,** 2026-11-13. Go replaces it only by a recorded decision, if the
+  first slice shows Rust costs more than it gives.
