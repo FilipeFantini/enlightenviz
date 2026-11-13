@@ -5,6 +5,7 @@ filters:
 stats:
   - {label: Good, query: regions, value: name}
   - {label: Bad, query: regions, value: total}
+  - {label: Trend, query: regions, value: name, trend: {query: regions, x: day, value: name}}
 queries:
   regions:
     sql: |

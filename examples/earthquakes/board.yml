@@ -23,7 +23,12 @@ filters:
       - {value: 6, label: "6 and over"}
 
 stats:
-  - {label: Events, query: summary, value: events, format: integer, hero: true}
+  - label: Events
+    query: summary
+    value: events
+    format: integer
+    hero: true
+    trend: {query: events_a_day, x: day, value: events}
   - {label: Strongest, query: summary, value: strongest, format: one_decimal}
   - {label: Average depth (km), query: summary, value: depth, format: integer}
   - {label: Regions hit, query: summary, value: regions, format: integer}
@@ -46,6 +51,25 @@ queries:
       where day >= $from
         and region = any($regions)
         and magnitude >= $min_magnitude
+    params:
+      from: {type: date, default: "2024-01-01"}
+      regions: {type: "list<text>", default: [Aegean, Andes, Cascadia, Hokkaido, Rift Valley, Tonga]}
+      min_magnitude: {type: number, default: 0}
+
+  events_a_day:
+    sql: |
+      with days as (
+        select d::date as day
+        from generate_series($from::date, (select max(day) from earthquake_events), interval '1 day') as d
+      )
+      select days.day, count(e.event_id) as events
+      from days
+      left join earthquake_events e
+        on e.day = days.day
+       and e.region = any($regions)
+       and e.magnitude >= $min_magnitude
+      group by days.day
+      order by days.day
     params:
       from: {type: date, default: "2024-01-01"}
       regions: {type: "list<text>", default: [Aegean, Andes, Cascadia, Hokkaido, Rift Valley, Tonga]}

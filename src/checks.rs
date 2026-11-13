@@ -55,6 +55,20 @@ fn stats(file: &str, doc: &Document, board: &Board, diagnostics: &mut Vec<Diagno
                 format!("use one of the declared queries: {}", names(board)),
             ));
         }
+        if let Some(trend) = &stat.trend
+            && !board.queries.contains_key(&trend.query)
+        {
+            diagnostics.push(Diagnostic::new(
+                file,
+                doc.line(&child(&child(&at, "trend"), "query")),
+                "stat-unknown-query",
+                format!(
+                    "the trend of the stat `{}` reads the query `{}`, which the board does not declare",
+                    stat.label, trend.query
+                ),
+                format!("use one of the declared queries: {}", names(board)),
+            ));
+        }
         if stat.hero {
             match hero {
                 Some(first) => diagnostics.push(Diagnostic::new(
@@ -385,6 +399,24 @@ pub fn columns(loaded: &LoadedBoard, query: &str, columns: &HashSet<&str>) -> Ve
                 ),
                 format!("use one of the columns: {have}"),
             ));
+        }
+    }
+    for (index, stat) in board.stats.iter().enumerate() {
+        let Some(trend) = stat.trend.as_ref().filter(|t| t.query == query) else {
+            continue;
+        };
+        for (key, column) in [("x", &trend.x), ("value", &trend.value)] {
+            if !columns.contains(column.as_str()) {
+                diagnostics.push(unknown(
+                    &format!("/stats/{index}/trend/{key}"),
+                    "stat-unknown-column",
+                    format!(
+                        "the trend of the stat `{}` reads the column `{column}`, which the query `{query}` does not return",
+                        stat.label
+                    ),
+                    format!("use one of the columns: {have}"),
+                ));
+            }
         }
     }
     for (index, filter) in board.filters.iter().enumerate() {

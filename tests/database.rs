@@ -237,9 +237,10 @@ async fn validation_against_a_database_finds_what_offline_cannot() {
         ),
         ("columns.yml".to_string(), Some(4), "filter-unknown-column"),
         ("columns.yml".to_string(), Some(7), "stat-unknown-column"),
-        ("columns.yml".to_string(), Some(18), "chart-unknown-field"),
+        ("columns.yml".to_string(), Some(8), "stat-unknown-column"),
         ("columns.yml".to_string(), Some(19), "chart-unknown-field"),
-        ("columns.yml".to_string(), Some(21), "chart-unknown-field"),
+        ("columns.yml".to_string(), Some(20), "chart-unknown-field"),
+        ("columns.yml".to_string(), Some(22), "chart-unknown-field"),
         (
             "duplicate_column.yml".to_string(),
             Some(5),
@@ -307,7 +308,7 @@ async fn the_server_does_not_start_on_a_bad_board() {
     )
     .await
     {
-        Err(PrepareError::Invalid(found)) => assert_eq!(found.len(), 11),
+        Err(PrepareError::Invalid(found)) => assert_eq!(found.len(), 12),
         other => panic!("expected the start to be refused, got {:?}", other.err()),
     }
 }
@@ -330,7 +331,7 @@ async fn the_serve_command_stops_with_the_diagnostics_on_a_bad_board() {
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
         stderr.contains("error[chart-unknown-field]")
-            && stderr.contains("not starting: 11 error(s)"),
+            && stderr.contains("not starting: 12 error(s)"),
         "{stderr}"
     );
     assert!(!stderr.contains("reader-test-only"), "{stderr}");
@@ -1017,6 +1018,11 @@ async fn the_definition_tells_the_page_what_the_board_is() {
     let stats = board["stats"].as_array().unwrap();
     assert_eq!(stats.len(), 4);
     assert_eq!(stats[0]["hero"], true);
+    assert_eq!(
+        stats[0]["trend"],
+        json!({"query": "events_a_day", "x": "day", "value": "events"})
+    );
+    assert!(stats[1]["trend"].is_null());
     assert_eq!(stats[1]["format"], "one_decimal");
 
     let charts = board["charts"].as_array().unwrap();
@@ -1075,6 +1081,20 @@ async fn the_example_queries_answer_over_the_invented_events() {
         .flat_map(|r| ["Under 4", "4 to 5", "5 to 6", "6 and over"].map(|c| r[c].as_i64().unwrap()))
         .sum();
     assert_eq!(total, 360);
+
+    // The trend of the hero figure: one row a day, adding up to the figure.
+    let trend = get(server.addr, &format!("{base}/events_a_day"))
+        .await
+        .json();
+    assert_eq!(trend["columns"], json!(["day", "events"]));
+    let days = trend["rows"].as_array().unwrap();
+    assert_eq!(days.len(), 30);
+    assert_eq!(
+        days.iter()
+            .map(|r| r["events"].as_i64().unwrap())
+            .sum::<i64>(),
+        360
+    );
 
     // The filters change the numbers: one region, and strong events only.
     let one = get(server.addr, &format!("{base}/summary?regions=Andes"))

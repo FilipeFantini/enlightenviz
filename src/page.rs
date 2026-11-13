@@ -11,7 +11,7 @@ use serde::Serialize;
 use serde_json::{Map, Value};
 
 use crate::assets::Assets;
-use crate::board::{Board, Chart, Control, Palette, StatFormat};
+use crate::board::{Board, Chart, Control, Palette, StatFormat, Trend};
 use crate::param::ParamType;
 
 /// Sent with every HTML response. Nothing may load from another host, no
@@ -123,6 +123,7 @@ struct StatView<'a> {
     value: &'a str,
     format: Option<StatFormat>,
     hero: bool,
+    trend: Option<&'a Trend>,
 }
 
 #[derive(Serialize)]
@@ -222,6 +223,7 @@ fn definition(board: &Board) -> Result<String, String> {
             value: &s.value,
             format: s.format,
             hero: s.hero,
+            trend: s.trend.as_ref(),
         })
         .collect();
     serde_json::to_string(&Definition {

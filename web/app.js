@@ -116,17 +116,23 @@ async function main() {
         for (const item of [].concat(values[filter.param])) params.append(filter.param, item);
       }
       const request = getJson(`/api/boards/${definition.id}/queries/${name}?${params}`, controller.signal);
-      for (const card of cards.get(name)) card.load(request);
+      for (const card of cards.get(name)) card.load(request, name);
     }
   }
   const retry = (name) => refresh([name]);
 
   const stats = element("div", "stats");
   const charts = element("div", "charts");
+  // The tiles beside the hero figure lay out in one clean row at every width
+  // (or one column on a phone), never with an orphan: the columns are counted.
+  const tiles = definition.stats.filter((stat) => !stat.hero).length;
+  const hero = definition.stats.some((stat) => stat.hero);
+  stats.style.setProperty("--wide", String(hero ? tiles + 2 : tiles));
+  stats.style.setProperty("--mid", String(Math.max(1, Math.min(tiles || 1, 4))));
   for (const stat of definition.stats) {
     const card = new StatCard(stat, retry);
     stats.append(card.root);
-    cards.set(stat.query, [...(cards.get(stat.query) ?? []), card]);
+    for (const name of card.queries) cards.set(name, [...(cards.get(name) ?? []), card]);
   }
   for (const chart of definition.charts) {
     const card = new ChartCard(chart, retry);

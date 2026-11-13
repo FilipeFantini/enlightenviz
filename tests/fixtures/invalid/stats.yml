@@ -4,6 +4,7 @@ stats:
   - {label: Total, query: a, value: n, hero: true}
   - {label: Nowhere, query: missing, value: n}
   - {label: Also hero, query: a, value: n, hero: true}
+  - {label: Trend nowhere, query: a, value: n, trend: {query: gone, x: n, value: n}}
 queries:
   a:
     sql: select 1 as n

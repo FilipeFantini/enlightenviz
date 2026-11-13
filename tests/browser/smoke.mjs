@@ -54,6 +54,15 @@ async function smoke(browser, board) {
   check(board, states.length === 7 && states.every((s) => s === "ready"), `4 stats and 3 charts are ready (${states.join(",")})`);
   const drawn = await page.evaluate(hasPixels);
   check(board, drawn.length === 3 && drawn.every(Boolean), `each of the 3 charts drew a canvas with content (${drawn.join(",")})`);
+  const spark = await page.evaluate(`(() => {
+    const spark = document.querySelector(".stat.hero .spark");
+    const canvas = spark?.querySelector("canvas");
+    if (!canvas) return "no canvas, state " + spark?.dataset.state;
+    const data = canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data;
+    for (let i = 3; i < data.length; i += 4) if (data[i] !== 0) return "drawn";
+    return "empty canvas";
+  })()`);
+  check(board, spark === "drawn", `the hero figure's trend is drawn (${spark})`);
   const firstChart = await page.evaluate(`performance.getEntriesByName("first-chart")[0]?.startTime`);
   check(board, typeof firstChart === "number", `time to the first chart: ${Math.round(firstChart)} ms`);
   const hero = await page.evaluate(`document.querySelector(".stat.hero .stat-value").textContent`);
@@ -104,6 +113,18 @@ async function smoke(browser, board) {
   const errors = await page.evaluate(`[...document.querySelectorAll(".card.chart")].map((c) => c.dataset.state + ":" + c.querySelector(".state").textContent)`);
   check(board, errors.every((s) => s.startsWith("error:") && /Error id: [0-9a-f]+-[0-9a-f]+/.test(s)), `a failed query shows its message and id (${errors[0]})`);
 
+  // On a phone nothing overflows, and the tiles are rows of the same width.
+  await page.goto(url);
+  await page.send("Emulation.setDeviceMetricsOverride", { width: 375, height: 900, deviceScaleFactor: 1, mobile: false });
+  await page.waitFor(ALL_SETTLED, "cards to settle at 375 px");
+  await new Promise((resolve) => setTimeout(resolve, 800));
+  const narrow = await page.evaluate(`({
+    overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    widths: [...document.querySelectorAll(".stat")].map((n) => Math.round(n.getBoundingClientRect().width)),
+  })`);
+  check(board, narrow.overflow <= 0, `at 375 px nothing overflows (${narrow.overflow} px)`);
+  check(board, new Set(narrow.widths).size === 1, `at 375 px the stat tiles all have one width (${narrow.widths})`);
+
   const other = page.requests.filter((u) => new URL(u).host !== host && !u.startsWith("data:"));
   check(board, other.length === 0, `every request went to ${host} (${page.requests.length} requests${other.length ? `, others: ${other}` : ""})`);
   // The error check above provokes 400 responses, which the browser logs as
@@ -112,6 +133,16 @@ async function smoke(browser, board) {
   check(board, unexpected.length === 0, `no console error or CSP violation${unexpected.length ? `: ${unexpected.join(" || ")}` : ""}`);
   if (page.warnings.length) console.log(`note ${board}: ${page.warnings.length} console warning(s): ${page.warnings.slice(0, 3).join(" || ")}`);
   page.close();
+
+  // With reduced motion the number is at its new value at once.
+  const calm = await browser.newPage({ width: 1440, height: 900, scheme: "light", reducedMotion: true });
+  await calm.goto(url);
+  await calm.waitFor(ALL_SETTLED, "cards to settle with reduced motion");
+  await calm.evaluate(`(() => { const s = document.querySelector("select"); s.value = "5"; s.dispatchEvent(new Event("change")); })()`);
+  await calm.waitFor(`document.querySelector(".stat.hero .stat-value").textContent !== "360"`, "the hero figure to change");
+  const at = await calm.evaluate(`document.querySelector(".stat.hero .stat-value").textContent`);
+  check(board, at === filtered, `with reduced motion the figure is at its new value at once (${at})`);
+  calm.close();
   return { board, firstChart: Math.round(firstChart), requests: page.requests.length };
 }
 

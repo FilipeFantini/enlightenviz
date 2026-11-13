@@ -84,6 +84,7 @@ fn every_mistake_is_reported_with_its_file_line_and_rule() {
         ("sql_shape.yml", Some(11), "sql-empty"),
         ("stats.yml", Some(5), "stat-unknown-query"),
         ("stats.yml", Some(6), "stat-hero-multiple"),
+        ("stats.yml", Some(7), "stat-unknown-query"),
         ("yaml_anchor.yml", Some(4), "yaml-unsupported"),
         ("yaml_syntax.yml", Some(4), "yaml-syntax"),
     ];

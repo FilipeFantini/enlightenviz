@@ -358,6 +358,18 @@
           "description": "The name of the query; a key of `queries`. It must return one row.",
           "type": "string"
         },
+        "trend": {
+          "description": "A small line drawn beside the number: how it came to be.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Trend"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "value": {
           "description": "The column that holds the number.",
           "type": "string"
@@ -388,6 +400,30 @@
           "type": "string",
           "const": "compact"
         }
+      ]
+    },
+    "Trend": {
+      "description": "The data of a stat's sparkline.",
+      "type": "object",
+      "properties": {
+        "query": {
+          "description": "A query of this board, which gives the points in the order they are\ndrawn. The filters apply to it like to any query.",
+          "type": "string"
+        },
+        "value": {
+          "description": "The column that holds the value of each point.",
+          "type": "string"
+        },
+        "x": {
+          "description": "The column that orders the points (a day, say): it is not drawn.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "query",
+        "x",
+        "value"
       ]
     }
   }

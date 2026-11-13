@@ -66,27 +66,75 @@ class Card {
   }
 }
 
+const easeOut = (t) => 1 - (1 - t) ** 3;
+const COUNT_MS = 300;
+
 export class StatCard extends Card {
   constructor(stat, retry) {
     super(stat.hero ? "stat hero" : "stat", retry);
     this.stat = stat;
     this.query = stat.query;
+    this.display = null; // the number on the screen now, while it counts
+    this.counting = 0;
     this.label = element("div", "stat-label", stat.label);
     this.value = element("div", "stat-value", "…");
-    this.root.append(this.label, this.value);
+    const body = element("div", "stat-body");
+    body.append(this.label, this.value);
+    this.root.append(body);
+    if (stat.trend) {
+      this.root.classList.add("has-trend");
+      this.spark = new Sparkline(stat, retry);
+      this.root.append(this.spark.root);
+    }
   }
 
-  show({ rows }) {
+  /** The queries this tile reads: its number's, and its trend's. */
+  get queries() {
+    return new Set([this.stat.query, this.stat.trend?.query].filter(Boolean));
+  }
+
+  load(pending, name) {
+    const jobs = [];
+    if (name === this.stat.query) jobs.push(super.load(pending));
+    if (name === this.stat.trend?.query) jobs.push(this.spark.load(pending));
+    return Promise.all(jobs);
+  }
+
+  /** The number counts to its new value, from the one on the screen. */
+  async #count(to) {
+    const from = this.display ?? 0;
+    const mine = ++this.counting;
+    const write = (value) => {
+      this.display = value;
+      this.value.textContent = formatNumber(value, this.stat.format);
+    };
+    if (reducedMotion() || from === to) return write(to);
+    const start = performance.now();
+    await new Promise((resolve) => {
+      const tick = (now) => {
+        if (mine !== this.counting) return resolve();
+        const t = Math.min(1, (now - start) / COUNT_MS);
+        write(t < 1 ? from + (to - from) * easeOut(t) : to);
+        if (t < 1) requestAnimationFrame(tick);
+        else resolve();
+      };
+      requestAnimationFrame(tick);
+    });
+  }
+
+  async show({ rows }) {
     if (rows.length !== 1) throw new Error(`the query returned ${rows.length} rows; a stat needs exactly one`);
     const raw = rows[0][this.stat.value];
     if (raw === null) return this.empty();
     this.value.className = "stat-value";
-    this.value.textContent = formatNumber(raw, this.stat.format);
+    await this.#count(raw);
     this.hasContent = true;
     this.root.dataset.state = "ready";
   }
 
   empty() {
+    this.counting += 1;
+    this.display = null;
     this.value.className = "stat-value stat-none";
     this.value.textContent = "No data";
     this.hasContent = true;
@@ -94,10 +142,118 @@ export class StatCard extends Card {
   }
 
   fail(error) {
+    this.counting += 1;
+    this.display = null;
     this.value.className = "stat-value stat-none";
     this.value.replaceChildren(describeError(error instanceof QueryError ? error : new QueryError(error.message, null)));
     this.hasContent = true;
     this.root.dataset.state = "error";
+  }
+}
+
+/**
+ * The small line beside a stat: the muted colour, no axes, the last point marked
+ * with its value. It has its own state, so that a trend that
+ * fails or is empty says so in its place and the number is left alone.
+ */
+class Sparkline {
+  constructor(stat, retry) {
+    this.stat = stat;
+    this.retry = retry;
+    this.token = 0;
+    this.chart = null;
+    this.rows = null;
+    this.root = element("div", "spark");
+    this.root.dataset.state = "loading";
+    this.root.setAttribute("role", "img");
+    this.root.setAttribute("aria-label", `${stat.label}: trend`);
+    this.canvas = element("div", "spark-canvas");
+    this.note = element("div", "spark-note");
+    this.note.hidden = true;
+    this.root.append(this.canvas, this.note);
+    new ResizeObserver(() => this.chart?.resize()).observe(this.canvas);
+    document.addEventListener("themechange", () => this.#draw(false));
+  }
+
+  async load(pending) {
+    const mine = ++this.token;
+    this.root.dataset.state = "loading";
+    let result;
+    try {
+      result = await pending;
+    } catch (error) {
+      if (mine === this.token) this.#say("error", error);
+      return;
+    }
+    if (mine !== this.token) return;
+    if (result.rows.length === 0) return this.#say("empty");
+    this.rows = result.rows;
+    this.note.hidden = true;
+    this.canvas.hidden = false;
+    try {
+      this.#draw(true);
+      this.root.dataset.state = "ready";
+    } catch (error) {
+      this.#say("error", error);
+    }
+  }
+
+  #say(state, error) {
+    this.chart?.dispose();
+    this.chart = null;
+    this.canvas.hidden = true;
+    this.note.hidden = false;
+    this.root.dataset.state = state;
+    if (state === "empty") {
+      this.note.textContent = "No data for the trend";
+      return;
+    }
+    const shown = error instanceof QueryError ? error : new QueryError(error.message, null);
+    this.note.replaceChildren(describeError(shown));
+  }
+
+  #draw(animate) {
+    if (this.rows === null || this.canvas.hidden) return;
+    const { x, value } = this.stat.trend;
+    const theme = readTheme();
+    const motion = !reducedMotion();
+    const points = this.rows.map((row) => [row[x], row[value]]);
+    const last = points[points.length - 1];
+    const option = {
+      backgroundColor: "transparent",
+      animation: motion && animate,
+      animationDuration: 600,
+      animationDurationUpdate: 300,
+      animationEasing: "cubicOut",
+      animationEasingUpdate: "cubicOut",
+      textStyle: { fontFamily: theme.font },
+      grid: { left: 4, right: 20, top: 22, bottom: 6 },
+      xAxis: { type: "category", show: false, boundaryGap: false },
+      yAxis: { type: "value", show: false, min: 0 },
+      series: [
+        {
+          type: "line",
+          silent: true,
+          data: points,
+          showSymbol: false,
+          lineStyle: { color: theme.muted, width: 2, join: "round", cap: "round" },
+          markPoint: {
+            animation: false,
+            symbol: "circle",
+            symbolSize: 8,
+            itemStyle: { color: theme.categorical[0], borderColor: theme.surface, borderWidth: 2 },
+            label: { show: true, position: "top", color: theme.ink2, fontSize: 12, fontFamily: theme.font, formatter: () => formatNumber(last[1]) },
+            data: [{ coord: [last[0], last[1]] }],
+          },
+        },
+      ],
+    };
+    if (this.chart !== null && !animate) {
+      this.chart.dispose();
+      this.chart = null;
+    }
+    this.chart ??= echarts.init(this.canvas, null, { renderer: "canvas" });
+    this.chart.setOption(option);
   }
 }
 

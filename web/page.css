@@ -212,7 +212,7 @@ input[type="date"],
 
 .stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(var(--wide, 4), minmax(0, 1fr));
   gap: var(--gap);
   margin-bottom: var(--gap);
 }
@@ -248,6 +248,54 @@ input[type="date"],
 .stat[data-state="loading"] .stat-value,
 .stat[data-state="refreshing"] .stat-value {
   opacity: 0.45;
+}
+
+/* The hero figure with its trend: the number on the left, the line on the right. */
+.stat.has-trend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px var(--gap);
+}
+
+.spark {
+  position: relative;
+  flex: 1 1 160px;
+  min-width: 0;
+  height: 84px;
+  transition: opacity 150ms ease-out;
+}
+
+.spark[data-state="loading"] {
+  opacity: 0.45;
+}
+
+.spark-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.spark-canvas[hidden],
+.spark-note[hidden] {
+  display: none;
+}
+
+.spark-note {
+  font-size: 12px;
+  color: var(--ink-2);
+  line-height: 1.4;
+}
+
+/* A little under 900 px the hero takes a row and the tiles share the next one. */
+@media (max-width: 899px) {
+  .stats {
+    grid-template-columns: repeat(var(--mid, 3), minmax(0, 1fr));
+  }
+
+  .stat.hero {
+    grid-column: 1 / -1;
+  }
 }
 
 .charts {
@@ -432,6 +480,22 @@ th {
 @media (max-width: 600px) {
   .plot {
     height: 260px;
+  }
+
+  /* On a phone the tiles are rows: the label on the left, the number on the right. */
+  .stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .stat:not(.hero) .stat-body {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--gap);
+  }
+
+  .stat:not(.hero) .stat-value {
+    margin-top: 0;
   }
 }
 

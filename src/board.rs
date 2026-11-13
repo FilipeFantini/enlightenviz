@@ -178,6 +178,22 @@ pub struct Stat {
     /// The headline figure of the board, drawn larger. At most one stat.
     #[serde(default)]
     pub hero: bool,
+    /// A small line drawn beside the number: how it came to be.
+    #[serde(default)]
+    pub trend: Option<Trend>,
+}
+
+/// The data of a stat's sparkline.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Trend {
+    /// A query of this board, which gives the points in the order they are
+    /// drawn. The filters apply to it like to any query.
+    pub query: String,
+    /// The column that orders the points (a day, say): it is not drawn.
+    pub x: String,
+    /// The column that holds the value of each point.
+    pub value: String,
 }
 
 /// Which colours a chart takes its series from.

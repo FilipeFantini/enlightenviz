@@ -146,7 +146,12 @@ sent in a query string, and would silently fall back to the default.
 
 ```yaml
 stats:
-  - {label: Events, query: summary, value: events, format: integer, hero: true}
+  - label: Events
+    query: summary
+    value: events
+    format: integer
+    hero: true
+    trend: {query: events_a_day, x: day, value: events}
   - {label: Strongest, query: summary, value: strongest, format: one_decimal}
 ```
 
@@ -157,6 +162,14 @@ stats:
 | `value` | text | yes | The column that holds the number. A `null` is shown as "No data". |
 | `format` | `integer`, `one_decimal` or `compact` | no | `12,345`, `5.4`, `12.3K`. Without it: up to two decimals. |
 | `hero` | boolean | no | The headline figure, drawn larger. At most one stat. |
+| `trend` | `{query, x, value}` | no | A small line drawn beside the number, from a query of this board: `x` is the column that orders the points (a day, say; it is not drawn) and `value` the column that holds each point. |
+
+The trend is a sparkline: a 2 px line in the muted colour, no axes, the last
+point marked in blue and its value written above it. The filters
+apply to the trend's query as to any other, and it is drawn again, animated,
+when they change. A trend that fails, or has no rows, says so in its place and
+leaves the number alone. The number counts up (or down) to a new value over
+about 300 ms, unless the visitor asks for reduced motion.
 
 ## A chart
 
@@ -321,7 +334,7 @@ reported at the `sql` key, with the line within the query in the message.
 | `filter-param-required` | A parameter a filter drives has no default in some query. |
 | `filter-control-type` | The control does not fit the parameter's type. |
 | `filter-options-invalid` | The options are missing, doubled, empty, on a `date` filter, not of the parameter's type, do not include the default, or `options_from` names an unknown query or one that needs a parameter without a default. |
-| `stat-unknown-query` | A stat reads a query the board does not declare. |
+| `stat-unknown-query` | A stat, or its `trend`, reads a query the board does not declare. |
 | `stat-hero-multiple` | More than one stat is `hero`. |
 | `param-default-invalid` | A default is not a valid value of its type. |
 | `param-max-items-invalid` | `max_items` on a non-list, or outside 1 to 1000. |
@@ -339,7 +352,7 @@ reported at the `sql` key, with the line within the query in the message.
 | `sql-not-a-select` | (With a database) the statement is not a read-only `SELECT`. |
 | `query-column-duplicate` | (With a database) two output columns have one name. |
 | `chart-unknown-field` | (With a database) a chart names a column in `encode`, `dimensions` or `visualMap` that the query does not return. |
-| `stat-unknown-column` | (With a database) a stat's `value` is not a column of its query. |
+| `stat-unknown-column` | (With a database) a stat's `value`, or its trend's `x` or `value`, is not a column of the query. |
 | `filter-unknown-column` | (With a database) an `options_from` `value` or `label` is not a column of its query. |
 
 ## Not in this format yet

@@ -150,8 +150,8 @@ export class Page {
   }
 }
 
-/** The page's cards are all out of `loading`, i.e. every query has answered. */
+/** The page's cards and sparklines are all out of `loading`, i.e. every query has answered. */
 export const ALL_SETTLED = `(() => {
-  const cards = document.querySelectorAll(".card.chart, .card.stat");
+  const cards = document.querySelectorAll(".card.chart, .card.stat, .spark");
   return cards.length > 0 && [...cards].every((c) => !["loading", "refreshing"].includes(c.dataset.state));
 })()`;
