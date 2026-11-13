@@ -13,6 +13,7 @@ use std::path::Path;
 use serde_path_to_error::Segment;
 
 use crate::board::{Board, valid_name};
+use crate::checks;
 use crate::diagnostic::Diagnostic;
 use crate::param::{ParamSpec, ParamType};
 use crate::source::{Document, child, parse};
@@ -239,6 +240,7 @@ fn compile_board(
             compiled.insert(name.clone(), c);
         }
     }
+    checks::offline(file, doc, board, diagnostics);
     if board.charts.is_empty() {
         diagnostics.push(Diagnostic::new(
             file,

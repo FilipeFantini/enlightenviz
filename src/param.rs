@@ -7,7 +7,7 @@
 //! lives in this one file.
 
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// Lists have no more items than this unless a parameter says `max_items`.
@@ -16,7 +16,7 @@ pub const DEFAULT_MAX_ITEMS: usize = 100;
 pub const MAX_ITEMS_CEILING: usize = 1000;
 
 /// The type of a parameter.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
 pub enum ParamType {
     /// Any text, without a NUL character. Sent to Postgres as `text`.
     #[serde(rename = "text")]
@@ -234,9 +234,10 @@ pub fn type_name(ty: ParamType) -> String {
     }
 }
 
-/// A YAML default is typed: a string for text and dates, a number for the
-/// numeric types, a bool for boolean. Anything else is refused, not coerced.
-fn default_item(scalar: Scalar, value: &Value) -> Result<String, String> {
+/// A YAML default, or a static filter option, is typed: a string for text and
+/// dates, a number for the numeric types, a bool for boolean. Anything else is
+/// refused, not coerced. Returns the canonical text of the value.
+pub fn default_item(scalar: Scalar, value: &Value) -> Result<String, String> {
     let raw = match (scalar, value) {
         (Scalar::Text | Scalar::Date, Value::String(s)) => s.clone(),
         (Scalar::Integer | Scalar::Number, Value::Number(n)) => n.to_string(),

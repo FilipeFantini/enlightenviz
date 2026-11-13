@@ -1,0 +1,36 @@
+board: chart-spec
+title: Chart specifications
+queries:
+  a:
+    sql: select 1 as n, 'x' as label
+charts:
+  - title: No specification
+    query: a
+  - title: Both libraries
+    query: a
+    vega_lite: {mark: bar}
+    echarts: {series: []}
+  - title: Data in the specification
+    query: a
+    vega_lite:
+      data: {values: [{n: 1}]}
+      mark: bar
+      encoding:
+        href: {field: label}
+  - title: A link, and a dataset
+    query: a
+    echarts:
+      title: {text: t, link: "https://example.com/"}
+      dataset: {source: []}
+      series:
+        - {type: scatter, symbol: "image://point.png"}
+  - title: The world outline is allowed in Vega-Lite only
+    query: a
+    vega_lite:
+      layer:
+        - {data: {name: world}, mark: geoshape}
+  - title: And not in ECharts
+    query: a
+    echarts:
+      series:
+        - {type: bar, data: {name: world}}

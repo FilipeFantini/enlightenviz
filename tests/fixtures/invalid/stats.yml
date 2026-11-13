@@ -1,0 +1,13 @@
+board: stats
+title: Stats
+stats:
+  - {label: Total, query: a, value: n, hero: true}
+  - {label: Nowhere, query: missing, value: n}
+  - {label: Also hero, query: a, value: n, hero: true}
+queries:
+  a:
+    sql: select 1 as n
+charts:
+  - title: C
+    query: a
+    vega_lite: {mark: bar}

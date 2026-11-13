@@ -1,0 +1,22 @@
+board: columns
+title: Columns
+filters:
+  - {label: Region, param: region, control: select, options_from: {query: regions, value: id, label: name}}
+stats:
+  - {label: Good, query: regions, value: name}
+  - {label: Bad, query: regions, value: total}
+queries:
+  regions:
+    sql: |
+      select distinct region as name from earthquakes_daily where region >= $region
+    params:
+      region: {type: text, default: ""}
+charts:
+  - title: ECharts columns
+    query: regions
+    echarts:
+      dimensions: [name, {name: size}]
+      visualMap: {dimension: weight}
+      series:
+        - {type: bar, encode: {x: name, y: [name, count], tooltip: 2}}
+        - {type: bar, name: not_a_column, encode: {x: name}}

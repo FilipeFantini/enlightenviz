@@ -26,7 +26,7 @@ begin
 end
 $$;
 
-grant select on earthquakes_daily to enlightenviz_reader, enlightenviz_load, enlightenviz_writer,
-    enlightenviz_disconnect;
+grant select on earthquakes_daily, earthquake_events to enlightenviz_reader, enlightenviz_load,
+    enlightenviz_writer, enlightenviz_disconnect;
 -- This role can write, so that only the read-only transaction stops a write.
 grant select, update on scratch to enlightenviz_writer;
