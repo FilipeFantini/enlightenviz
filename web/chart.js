@@ -24,6 +24,9 @@ function merge(base, over) {
 const asList = (value) => (value === undefined ? [] : Array.isArray(value) ? value : [value]);
 const first = (value) => (Array.isArray(value) ? value[0] : value);
 
+/** Space kept around a map, so that a point at its edge is not cut by the card. */
+export const MAP_MARGIN = 8;
+
 /** Every `map` the option names must be the world outline the page registers. */
 function checkMaps(node) {
   if (Array.isArray(node)) return node.forEach(checkMaps);
@@ -40,6 +43,10 @@ function axisDefaults(axis, theme) {
   const value = axis.type === "value" || axis.type === "log";
   return merge(
     {
+      // The labels of an axis whose scale changes are redrawn at once. Animated,
+      // the old labels and the new ones are on the screen together for a frame
+      // and overlap; the marks still move.
+      animation: false,
       axisLine: { lineStyle: { color: theme.axis, width: 1 } },
       axisTick: { show: false },
       axisLabel: { color: theme.muted, fontSize: 12, fontFamily: theme.font, hideOverlap: true },
@@ -49,26 +56,47 @@ function axisDefaults(axis, theme) {
   );
 }
 
+// While a mark is hovered it is at full strength and the others in the chart
+// recede.
+const emphasis = { focus: "self", blurScope: "coordinateSystem" };
+const blur = { itemStyle: { opacity: 0.3 }, label: { opacity: 0.3 } };
+
 function seriesDefaults(series, theme, horizontal) {
-  const ring = { borderColor: theme.surface, borderWidth: 2 };
   switch (series.type) {
     case "bar":
       return merge(
         {
           barMaxWidth: 24,
           label: { color: theme.ink2, fontSize: 12, fontFamily: theme.font, textBorderWidth: 0 },
-          itemStyle: { ...ring, borderRadius: horizontal ? [0, 4, 4, 0] : [4, 4, 0, 0] },
+          itemStyle: {
+            borderColor: theme.surface,
+            borderWidth: 2,
+            borderRadius: horizontal ? [0, 4, 4, 0] : [4, 4, 0, 0],
+          },
+          emphasis,
+          blur,
+          animationDelay: (index) => Math.min(index * 8, 240),
         },
         series,
       );
     case "scatter":
-      return merge({ itemStyle: { ...ring, opacity: 0.7 }, emphasis: { itemStyle: { opacity: 1 } } }, series);
+      // Dense points must stay readable: translucent, ringed in the surface
+      // colour, and full strength when hovered.
+      return merge(
+        {
+          itemStyle: { borderColor: theme.surface, borderWidth: 1, opacity: 0.55 },
+          emphasis: { ...emphasis, itemStyle: { opacity: 1, borderWidth: 1 } },
+          blur,
+          animationDelay: (index) => Math.min(index * 3, 240),
+        },
+        series,
+      );
     case "line":
       return merge(
         {
           lineStyle: { width: 2, join: "round", cap: "round" },
           symbolSize: 8,
-          itemStyle: ring,
+          itemStyle: { borderColor: theme.surface, borderWidth: 2 },
           areaStyle: series.areaStyle === undefined ? undefined : { opacity: 0.1 },
         },
         series,
@@ -78,6 +106,36 @@ function seriesDefaults(series, theme, horizontal) {
   }
 }
 
+/**
+ * A scatter's points are small, and a hit area under 24 px is hard to find with
+ * a pointer. Each scatter series therefore gets a twin: invisible, 24 px, drawn
+ * above, which takes the pointer and the tooltip (the series itself is silent).
+ * Returns the twins, and which series each one stands for.
+ */
+function withHitAreas(series) {
+  const twins = [];
+  const hitFor = new Map();
+  for (const [index, s] of series.entries()) {
+    if (s.type !== "scatter") continue;
+    s.silent = true;
+    const twin = {
+      type: "scatter",
+      coordinateSystem: s.coordinateSystem,
+      geoIndex: s.geoIndex,
+      encode: s.encode,
+      symbolSize: 24,
+      itemStyle: { opacity: 0 },
+      emphasis: { disabled: true },
+      blur: { itemStyle: { opacity: 0 } },
+      z: (s.z ?? 2) + 1,
+    };
+    hitFor.set(series.length + twins.length, index);
+    twins.push(twin);
+  }
+  series.push(...twins);
+  return hitFor;
+}
+
 /** The author's option with the house theme and the rows. */
 function houseOption(authored, theme, palette, rows, motion) {
   checkMaps(authored);
@@ -85,6 +143,7 @@ function houseOption(authored, theme, palette, rows, motion) {
   const spec = structuredClone(authored);
   const horizontal = asList(spec.yAxis)[0]?.type === "category";
   const series = asList(spec.series).map((s) => seriesDefaults(s, theme, horizontal));
+  const hitFor = withHitAreas(series);
   // Only named series are in the legend: an unnamed one is a helper, such as
   // the invisible hit area drawn over a scatter.
   const legend = series.filter((s) => s.name !== undefined).length >= 2;
@@ -94,7 +153,7 @@ function houseOption(authored, theme, palette, rows, motion) {
       color: palette === "ordered" ? theme.ramp : theme.categorical,
       textStyle: { fontFamily: theme.font, color: theme.ink2 },
       animation: motion,
-      animationDuration: 300,
+      animationDuration: 600,
       animationDurationUpdate: 300,
       animationEasing: "cubicOut",
       animationEasingUpdate: "cubicOut",
@@ -135,16 +194,16 @@ function houseOption(authored, theme, palette, rows, motion) {
   if (option.geo !== undefined) {
     option.geo = merge(
       {
-        // 1: longitude and latitude are drawn at the same scale (equirectangular),
-        // as the Vega-Lite map is.
+        // 1: longitude and latitude are drawn at the same scale (equirectangular).
         aspectScale: 1,
+        silent: true,
         itemStyle: { areaColor: theme.grid, borderWidth: 0 },
         emphasis: { disabled: true },
       },
       option.geo,
     );
   }
-  return option;
+  return { option, hitFor };
 }
 
 /** The text of a tooltip, as value-first entries, from what ECharts reports. */
@@ -169,7 +228,7 @@ function entriesFor(params, series) {
     if (typeof dimension !== "string" || seen.has(dimension) || !(dimension in row)) continue;
     seen.add(dimension);
     const label = dimension === dimensions[0] && params.seriesName && named.length === 0 ? params.seriesName : prettify(dimension);
-    entries.push({ value: formatCell(row[dimension]), label });
+    entries.push({ value: formatDay(formatCell(row[dimension])), label });
   }
   return entries;
 }
@@ -200,7 +259,7 @@ export async function create(host, def, { theme, motion }) {
   const mapBox = () => {
     // A margin keeps a point at the edge of the map (Tonga, 176 degrees west)
     // from being cut by the edge of the card.
-    const margin = 16;
+    const margin = MAP_MARGIN;
     const { width: full, height: tall } = host.getBoundingClientRect();
     const [width, height] = [full - 2 * margin, tall - 2 * margin];
     const [w, h] = [Math.min(width, height * shape), Math.min(height, width / shape)];
@@ -208,21 +267,45 @@ export async function create(host, def, { theme, motion }) {
     return { left: x, right: x, top: y, bottom: y };
   };
   let option = null;
-  let rowCount = 0;
+  let hitFor = new Map();
+  let marks = []; // every mark a tooltip can be shown for, left to right
   let focused = -1;
+
+  /** Shows the tooltip of mark `index` and emphasises the mark. */
+  function show(index) {
+    if (marks.length === 0) return;
+    focused = Math.min(marks.length - 1, Math.max(0, index));
+    const { seriesIndex, dataIndex } = marks[focused];
+    const twin = [...hitFor].find(([, original]) => original === seriesIndex)?.[0];
+    chart.dispatchAction({ type: "downplay" });
+    chart.dispatchAction({ type: "highlight", seriesIndex, dataIndex });
+    chart.dispatchAction({ type: "showTip", seriesIndex: twin ?? seriesIndex, dataIndex });
+  }
 
   return {
     /** Draws `rows`; ECharts animates the change by itself. */
-    update(rows) {
-      rowCount = rows.length;
+    update(rows, { animate = true } = {}) {
       focused = -1;
       if (option === null) {
-        option = houseOption(def.spec, theme, def.palette, rows, motion);
+        ({ option, hitFor } = houseOption(def.spec, theme, def.palette, rows, motion && animate));
         if (option.geo !== undefined) Object.assign(option.geo, mapBox());
         option.tooltip.formatter = (params) => tooltipContent(entriesFor(params, option.series));
         chart.setOption(option);
+        // The pointer is over a twin; the mark it stands for is emphasised.
+        chart.on("mouseover", "series", ({ seriesIndex, dataIndex }) => {
+          if (hitFor.has(seriesIndex)) chart.dispatchAction({ type: "highlight", seriesIndex: hitFor.get(seriesIndex), dataIndex });
+        });
+        chart.on("mouseout", "series", ({ seriesIndex, dataIndex }) => {
+          if (hitFor.has(seriesIndex)) chart.dispatchAction({ type: "downplay", seriesIndex: hitFor.get(seriesIndex), dataIndex });
+        });
       } else {
-        chart.setOption({ dataset: { source: rows } });
+        chart.setOption({ animation: motion && animate, dataset: { source: rows } });
+      }
+      marks = [];
+      for (let dataIndex = 0; dataIndex < rows.length; dataIndex++) {
+        for (const [seriesIndex, s] of option.series.entries()) {
+          if (!hitFor.has(seriesIndex) && s.type !== undefined) marks.push({ seriesIndex, dataIndex });
+        }
       }
     },
     /**
@@ -236,18 +319,17 @@ export async function create(host, def, { theme, motion }) {
       const box = mapBox();
       return ["left", "right", "top", "bottom"].some((side) => box[side] !== option.geo[side]);
     },
-    /** Shows the tooltip of the next (`1`) or previous (`-1`) row. */
+    /** Shows the tooltip of the next (`1`) or previous (`-1`) mark. */
     step(delta) {
-      focused = Math.min(rowCount - 1, Math.max(0, focused < 0 ? (delta > 0 ? 0 : rowCount - 1) : focused + delta));
-      chart.dispatchAction({ type: "showTip", seriesIndex: 0, dataIndex: focused });
+      show(focused < 0 ? (delta > 0 ? 0 : marks.length - 1) : focused + delta);
     },
     stepTo(index) {
-      focused = Math.min(rowCount - 1, Math.max(0, index));
-      chart.dispatchAction({ type: "showTip", seriesIndex: 0, dataIndex: focused });
+      show(index);
     },
     clear() {
       focused = -1;
       chart.dispatchAction({ type: "hideTip" });
+      chart.dispatchAction({ type: "downplay" });
     },
     dispose() {
       chart.dispose();

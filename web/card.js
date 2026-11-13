@@ -3,9 +3,10 @@
 // shows the message and the id the server logged; an empty result says so.
 // A card never shows a blank chart that could be read as zero.
 
-import { create } from "./chart.js";
+import { MAP_MARGIN, create } from "./chart.js";
 import { formatCell, formatNumber } from "./format.js";
 import { readTheme, reducedMotion } from "./theme.js";
+import { aspect, loadWorld, usesWorld } from "./world.js";
 
 const TABLE_ROWS = 500;
 
@@ -131,12 +132,28 @@ export class ChartCard extends Card {
 
     this.host.addEventListener("keydown", (event) => this.#key(event));
     this.host.addEventListener("blur", () => this.drawing?.clear());
+    // A chart that draws the world map is as tall as the outline needs for the
+    // card's width: no empty band above or below it, at any width.
+    this.mapShape = null;
+    if (usesWorld(chart.spec)) {
+      loadWorld().then((world) => {
+        this.mapShape = aspect(world);
+        this.#fit();
+      });
+    }
     new ResizeObserver(async () => {
+      this.#fit();
       if (this.drawing === null || this.plot.hidden) return;
       if (await this.drawing.resize()) await this.#rebuild();
     }).observe(this.plot);
     document.addEventListener("themechange", () => this.#rebuild());
     this.#say("Loading…");
+  }
+
+  #fit() {
+    const width = this.plot.clientWidth;
+    if (this.mapShape === null || width === 0) return;
+    this.plot.style.height = `${Math.round((width - 2 * MAP_MARGIN) / this.mapShape) + 2 * MAP_MARGIN}px`;
   }
 
   #say(content) {

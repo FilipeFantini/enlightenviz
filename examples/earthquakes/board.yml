@@ -108,7 +108,7 @@ charts:
     query: daily
     palette: ordered
     echarts:
-      tooltip: {trigger: axis}
+      tooltip: {trigger: item}
       xAxis: {type: time, axisLabel: {formatter: "{d} {MMM}"}}
       yAxis: {type: value}
       series:
@@ -133,22 +133,15 @@ charts:
     query: events
     echarts:
       tooltip: {trigger: item}
-      geo: {map: world, roam: false, silent: true}
+      geo: {map: world, roam: false}
       visualMap:
         show: false
         dimension: magnitude
         min: 2.5
         max: 7.5
         seriesIndex: 0
-        inRange: {symbolSize: [8, 28]}
+        inRange: {symbolSize: [6, 14]}
       series:
         - type: scatter
           coordinateSystem: geo
-          encode: {lng: longitude, lat: latitude, value: magnitude}
-        # An invisible symbol of 24 px over each point: the hit area.
-        - type: scatter
-          coordinateSystem: geo
-          symbolSize: 24
-          itemStyle: {opacity: 0}
-          emphasis: {disabled: true}
           encode: {lng: longitude, lat: latitude, value: magnitude, tooltip: [magnitude, place, depth_km]}
