@@ -31,7 +31,7 @@ Maintained by one person, with AI agents writing the code.
   names, and `GET /healthz`. Any problem at start stops the start.
 - **The page**: filters above the content, stat tiles, and charts drawn in the
   browser, with the filters in the URL, animation to new data, tooltips (also by
-  keyboard), a table view, explicit empty and error states, light and dark, from
+  keyboard), a table view, a trend line beside the headline number, numbers that count to their new value, explicit empty and error states, light and dark, from
   375 to 1440 px. Plain ES modules and CSS, no build step; ECharts is vendored
   under [`vendor/`](vendor/README.md) and embedded in the binary, and every page
   carries a strict content security policy. See "The page" in
@@ -123,7 +123,7 @@ Each of these is a decision to take later, not an oversight.
   about a third of that compressed). Compression belongs to the proxy in front,
   like rate limits.
 - **No line or area chart is drawn by the example,** so their house styles are
-  set but untested.
+  set but untested. The sparkline of a stat's `trend` is the one line drawn.
 - **The option is the author's.** A board is trusted code: what `validate`
   refuses in an option (data, URLs) is a rule of the format, not a defence
   against a hostile author.
@@ -153,10 +153,11 @@ Each of these is a decision to take later, not an oversight.
 On one Mac (aarch64) under Docker, with the example board and a pool of 4,
 resident memory of the server was 2.3 MiB right after start and 2.7 MiB after 1,000
 sequential and 200 concurrent requests, with a peak of 6.8 MiB during the
-concurrent burst; the image was 3.9 MB. With the page and ECharts embedded it was 3.7 MiB after
-start and 3.75 MiB after 1,000 page loads of five requests each (a page,
-`echarts.min.js`, `app.js`, a definition and a query), with a peak of 3.75 MiB,
-and the image was 5.8 MB. Design section 10 sets a ceiling of 64 MiB. This is a
+concurrent burst; the image was 3.9 MB. With the page and ECharts embedded it
+was 3.6 MiB after start and 3.8 MiB after 1,000 page loads of five requests each (a page,
+`echarts.min.js`, `app.js`, a definition and a query), also its peak, and the
+image was 5.9 MB; the script of a page is 1.17 MB (0.38 MB gzipped), of which
+47 KB is the page's own. Design section 10 sets a ceiling of 64 MiB. This is a
 measurement, not a CI gate yet.
 
 ## Development
