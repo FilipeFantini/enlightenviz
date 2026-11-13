@@ -1,6 +1,7 @@
 // Screenshots of each board, light and dark, at 1440 and 375 px wide, and the
-// frames of the transition after a filter change, for the chart-library
-// comparison in docs/review/chart-library. Run by run.sh capture.
+// frames of the transition after a filter change: the baseline images in
+// docs/visuals, which a change is compared against by eye. Run by run.sh
+// capture.
 
 import { writeFileSync } from "node:fs";
 
@@ -81,36 +82,11 @@ async function transition(browser, board) {
   page.close();
 }
 
-// Time from the start of the navigation to the first chart drawn (the page's
-// own "first-chart" mark), cold (the browser's cache off) and warm, seven runs
-// each. The browser, the server and the database share one machine and nothing
-// is throttled, so these are a comparison between the two boards, not a
-// prediction for a visitor's connection.
-async function timings(browser, board) {
-  const median = (list) => [...list].sort((a, b) => a - b)[Math.floor(list.length / 2)];
-  const result = {};
-  for (const cache of ["cold", "warm"]) {
-    const runs = [];
-    for (let run = 0; run < 8; run++) {
-      const page = await browser.newPage({ width: 1440, height: 900, scheme: "light" });
-      await page.send("Network.setCacheDisabled", { cacheDisabled: cache === "cold" });
-      await page.goto(`${base}/boards/${board}`);
-      await page.waitFor(ALL_SETTLED, "every card to settle");
-      const time = await page.evaluate(`performance.getEntriesByName("first-chart")[0].startTime`);
-      if (cache === "cold" || run > 0) runs.push(Math.round(time)); // the first warm run fills the cache
-      page.close();
-    }
-    result[cache] = { median: median(runs), runs };
-  }
-  console.log(`${board}: first chart, cold ${result.cold.median} ms (${result.cold.runs}), warm ${result.warm.median} ms (${result.warm.runs})`);
-}
-
 const browser = await startBrowser();
 try {
   for (const board of boards) {
     await screenshots(browser, board);
     await transition(browser, board);
-    await timings(browser, board);
   }
 } finally {
   browser.close();

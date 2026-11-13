@@ -32,8 +32,7 @@ queries:
 charts:
   - title: Events
     query: by_region
-    vega_lite:
-      mark: line
-      encoding:
-        x: {field: day, type: temporal}
-        y: {field: events, type: quantitative}
+    echarts:
+      xAxis: {type: category}
+      series:
+        - {type: line, encode: {x: day, y: events}}

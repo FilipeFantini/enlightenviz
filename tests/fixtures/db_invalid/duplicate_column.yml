@@ -6,7 +6,6 @@ queries:
 charts:
   - title: A
     query: a
-    vega_lite:
-      mark: point
-      encoding:
-        x: {field: x, type: quantitative}
+    echarts:
+      series:
+        - {type: bar, encode: {x: x}}

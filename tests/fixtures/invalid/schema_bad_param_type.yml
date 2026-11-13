@@ -9,4 +9,4 @@ queries:
 charts:
   - title: A
     query: a
-    vega_lite: {mark: point}
+    echarts: {series: []}

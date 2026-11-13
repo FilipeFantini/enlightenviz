@@ -8,7 +8,6 @@ queries:
 charts:
   - title: Bumped
     query: bump
-    vega_lite:
-      mark: point
-      encoding:
-        x: {field: bumped, type: quantitative}
+    echarts:
+      series:
+        - {type: bar, encode: {x: bumped, y: bumped}}

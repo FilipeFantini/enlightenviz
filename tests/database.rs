@@ -272,13 +272,7 @@ async fn validation_against_a_database_finds_what_offline_cannot() {
 #[tokio::test]
 async fn the_good_boards_pass_against_a_database() {
     admin().await;
-    for dir in [
-        "examples/earthquakes",
-        "examples/earthquakes-vega",
-        "examples/earthquakes-echarts",
-        API,
-        "tests/fixtures/writes",
-    ] {
+    for dir in ["examples/earthquakes", API, "tests/fixtures/writes"] {
         let (catalog, offline) = load_dir(Path::new(dir));
         assert!(offline.is_empty(), "{dir}: {offline:?}");
         let db = Database::new(&settings(&Options::default())).unwrap();
@@ -846,8 +840,7 @@ async fn a_client_that_disconnects_mid_query_does_not_wedge_the_pool() {
 
 // ------------------------------------------------------------------ pages
 
-const VEGA_BOARD: &str = "examples/earthquakes-vega";
-const ECHARTS_BOARD: &str = "examples/earthquakes-echarts";
+const BOARD: &str = "examples/earthquakes";
 
 /// The policy of the design, word for word: it is never weakened to make a
 /// library work.
@@ -888,46 +881,38 @@ fn page_files(html: &str) -> Vec<String> {
 
 #[tokio::test]
 async fn the_index_lists_the_boards_under_the_policy() {
-    let server = start(ECHARTS_BOARD, Options::default()).await;
+    let server = start(BOARD, Options::default()).await;
     let reply = get(server.addr, "/").await;
     assert_page_headers(&reply);
     assert!(
         reply
             .body
-            .contains("<a href=\"/boards/earthquakes-echarts\">Earthquakes, January 2024</a>"),
+            .contains("<a href=\"/boards/earthquakes\">Earthquakes, January 2024</a>"),
         "{}",
         reply.body
     );
 }
 
 #[tokio::test]
-async fn a_board_page_has_the_policy_no_inline_code_and_only_its_libraries() {
-    let vega = start(VEGA_BOARD, Options::default()).await;
-    let echarts = start(ECHARTS_BOARD, Options::default()).await;
-    let vega_page = get(vega.addr, "/boards/earthquakes-vega").await;
-    let echarts_page = get(echarts.addr, "/boards/earthquakes-echarts").await;
-    for page in [&vega_page, &echarts_page] {
-        assert_page_headers(page);
-        // The policy forbids inline script and style, so the page has none.
-        assert!(!page.body.contains("<script>"), "{}", page.body);
-        assert!(!page.body.contains("<style"), "{}", page.body);
-        assert!(!page.body.contains(" style="), "{}", page.body);
-        assert!(!page.body.contains(" onclick="), "{}", page.body);
-        // Nothing is loaded from another host.
-        assert!(!page.body.contains("http://") && !page.body.contains("https://"));
-    }
-    let vega_files = page_files(&vega_page.body).join(" ");
-    assert!(vega_files.contains("/vega.min.js") && vega_files.contains("/vega-lite.min.js"));
-    assert!(!vega_files.contains("echarts"));
-    let echarts_files = page_files(&echarts_page.body).join(" ");
-    assert!(echarts_files.contains("/echarts.min.js"));
-    assert!(!echarts_files.contains("vega"));
+async fn a_board_page_has_the_policy_and_no_inline_code() {
+    let server = start(BOARD, Options::default()).await;
+    let page = get(server.addr, "/boards/earthquakes").await;
+    assert_page_headers(&page);
+    // The policy forbids inline script and style, so the page has none.
+    assert!(!page.body.contains("<script>"), "{}", page.body);
+    assert!(!page.body.contains("<style"), "{}", page.body);
+    assert!(!page.body.contains(" style="), "{}", page.body);
+    assert!(!page.body.contains(" onclick="), "{}", page.body);
+    // Nothing is loaded from another host.
+    assert!(!page.body.contains("http://") && !page.body.contains("https://"));
+    let files = page_files(&page.body).join(" ");
+    assert!(files.contains("/echarts.min.js") && files.contains("/app.js"));
 }
 
 #[tokio::test]
 async fn assets_are_served_under_their_hash_and_cached_for_a_year() {
-    let server = start(VEGA_BOARD, Options::default()).await;
-    let page = get(server.addr, "/boards/earthquakes-vega").await;
+    let server = start(BOARD, Options::default()).await;
+    let page = get(server.addr, "/boards/earthquakes").await;
     let files = page_files(&page.body);
     let app = files.iter().find(|f| f.ends_with("/app.js")).unwrap();
     let css = files.iter().find(|f| f.ends_with("/page.css")).unwrap();
@@ -956,11 +941,11 @@ async fn assets_are_served_under_their_hash_and_cached_for_a_year() {
     );
 
     // A vendored library is served byte for byte.
-    let library = get(server.addr, &format!("/assets/{hash}/vega.min.js")).await;
+    let library = get(server.addr, &format!("/assets/{hash}/echarts.min.js")).await;
     assert_eq!(library.status, 200);
     assert_eq!(
         library.body.len() as u64,
-        std::fs::metadata("vendor/vega.min.js").unwrap().len()
+        std::fs::metadata("vendor/echarts.min.js").unwrap().len()
     );
 
     // Another hash, another name, and a path out of the table are 404s.
@@ -978,8 +963,8 @@ async fn assets_are_served_under_their_hash_and_cached_for_a_year() {
 
 #[tokio::test]
 async fn every_file_a_script_imports_is_embedded() {
-    let server = start(ECHARTS_BOARD, Options::default()).await;
-    let page = get(server.addr, "/boards/earthquakes-echarts").await;
+    let server = start(BOARD, Options::default()).await;
+    let page = get(server.addr, "/boards/earthquakes").await;
     let files = page_files(&page.body);
     let app = files.iter().find(|f| f.ends_with("/app.js")).unwrap();
     let base = app.rsplit_once('/').unwrap().0.to_string();
@@ -1006,13 +991,13 @@ async fn every_file_a_script_imports_is_embedded() {
 
 #[tokio::test]
 async fn the_definition_tells_the_page_what_the_board_is() {
-    let server = start(ECHARTS_BOARD, Options::default()).await;
-    let reply = get(server.addr, "/api/boards/earthquakes-echarts").await;
+    let server = start(BOARD, Options::default()).await;
+    let reply = get(server.addr, "/api/boards/earthquakes").await;
     assert_eq!(reply.status, 200);
     assert!(reply.head.contains("content-type: application/json"));
     assert!(reply.head.contains("cache-control: no-store"));
     let board = reply.json();
-    assert_eq!(board["id"], "earthquakes-echarts");
+    assert_eq!(board["id"], "earthquakes");
     assert_eq!(board["title"], "Earthquakes, January 2024");
 
     let filters = board["filters"].as_array().unwrap();
@@ -1036,7 +1021,6 @@ async fn the_definition_tells_the_page_what_the_board_is() {
 
     let charts = board["charts"].as_array().unwrap();
     assert_eq!(charts.len(), 3);
-    assert_eq!(charts[0]["engine"], "echarts");
     assert_eq!(charts[0]["palette"], "ordered");
     assert_eq!(charts[1]["palette"], "categorical");
     // The specification goes out as written: no data in it.
@@ -1058,12 +1042,8 @@ async fn the_definition_tells_the_page_what_the_board_is() {
 
 #[tokio::test]
 async fn an_unknown_board_is_a_404_for_the_page_and_the_definition() {
-    let server = start(ECHARTS_BOARD, Options::default()).await;
-    for target in [
-        "/boards/nope",
-        "/api/boards/nope",
-        "/boards/earthquakes-vega",
-    ] {
+    let server = start(BOARD, Options::default()).await;
+    for target in ["/boards/nope", "/api/boards/nope"] {
         let reply = get(server.addr, target).await;
         assert_eq!(reply.status, 404, "{target}");
         assert_eq!(reply.error_code(), "not_found");
@@ -1072,8 +1052,8 @@ async fn an_unknown_board_is_a_404_for_the_page_and_the_definition() {
 
 #[tokio::test]
 async fn the_example_queries_answer_over_the_invented_events() {
-    let server = start(ECHARTS_BOARD, Options::default()).await;
-    let base = "/api/boards/earthquakes-echarts/queries";
+    let server = start(BOARD, Options::default()).await;
+    let base = "/api/boards/earthquakes/queries";
 
     let regions = get(server.addr, &format!("{base}/regions")).await.json();
     assert_eq!(regions["rows"].as_array().unwrap().len(), 6);

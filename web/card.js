@@ -3,15 +3,10 @@
 // shows the message and the id the server logged; an empty result says so.
 // A card never shows a blank chart that could be read as zero.
 
+import { create } from "./chart.js";
 import { formatCell, formatNumber } from "./format.js";
 import { readTheme, reducedMotion } from "./theme.js";
 
-// Loaded on demand: a board that has no Vega-Lite chart never loads the Vega
-// adapter, which needs the Vega library the page does not include for it.
-const adapters = {
-  vega_lite: () => import("./chart-vega.js"),
-  echarts: () => import("./chart-echarts.js"),
-};
 const TABLE_ROWS = 500;
 
 /** A failed query: the server's message and the id it logged under. */
@@ -110,7 +105,7 @@ export class ChartCard extends Card {
     super("chart", retry);
     this.chart = chart;
     this.query = chart.query;
-    this.adapter = null;
+    this.drawing = null;
     this.rows = null;
     this.columns = null;
 
@@ -135,10 +130,10 @@ export class ChartCard extends Card {
     this.root.append(header, this.plot, this.tableBox);
 
     this.host.addEventListener("keydown", (event) => this.#key(event));
-    this.host.addEventListener("blur", () => this.adapter?.clear());
+    this.host.addEventListener("blur", () => this.drawing?.clear());
     new ResizeObserver(async () => {
-      if (this.adapter === null || this.plot.hidden) return;
-      if (await this.adapter.resize()) await this.#rebuild();
+      if (this.drawing === null || this.plot.hidden) return;
+      if (await this.drawing.resize()) await this.#rebuild();
     }).observe(this.plot);
     document.addEventListener("themechange", () => this.#rebuild());
     this.#say("Loading…");
@@ -150,28 +145,28 @@ export class ChartCard extends Card {
   }
 
   #key(event) {
-    if (this.adapter === null) return;
-    const handled = { ArrowRight: () => this.adapter.step(1), ArrowLeft: () => this.adapter.step(-1), Home: () => this.adapter.stepTo(0), End: () => this.adapter.stepTo(Infinity), Escape: () => this.adapter.clear() };
+    if (this.drawing === null) return;
+    const handled = { ArrowRight: () => this.drawing.step(1), ArrowLeft: () => this.drawing.step(-1), Home: () => this.drawing.stepTo(0), End: () => this.drawing.stepTo(Infinity), Escape: () => this.drawing.clear() };
     if (handled[event.key] === undefined) return;
     event.preventDefault();
     handled[event.key]();
   }
 
   async #draw(rows, animate) {
-    if (this.adapter === null) {
-      this.adapter = await (await adapters[this.chart.engine]()).create(this.host, this.chart, {
+    if (this.drawing === null) {
+      this.drawing = await create(this.host, this.chart, {
         theme: readTheme(),
         motion: !reducedMotion(),
       });
     }
-    await this.adapter.update(rows, { animate });
+    await this.drawing.update(rows, { animate });
   }
 
   /** Builds the chart again from the rows already held: after a new theme or a change of layout. */
   async #rebuild() {
-    if (this.adapter === null || this.rows === null) return;
-    this.adapter.dispose();
-    this.adapter = null;
+    if (this.drawing === null || this.rows === null) return;
+    this.drawing.dispose();
+    this.drawing = null;
     try {
       await this.#draw(this.rows, false);
     } catch (error) {
@@ -184,7 +179,7 @@ export class ChartCard extends Card {
     this.tableBox.hidden = !on;
     this.plot.hidden = on;
     if (on) this.#renderTable();
-    else if (this.adapter !== null) Promise.resolve(this.adapter.resize()).then((again) => again && this.#rebuild());
+    else if (this.drawing !== null) Promise.resolve(this.drawing.resize()).then((again) => again && this.#rebuild());
   }
 
   #renderTable() {

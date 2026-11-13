@@ -16,4 +16,4 @@ queries:
 charts:
   - title: A
     query: unknown_table
-    vega_lite: {mark: point}
+    echarts: {series: []}

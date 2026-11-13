@@ -23,7 +23,7 @@ pub struct Asset {
 const JS: &str = "text/javascript; charset=utf-8";
 
 /// Every file that can be served. The order is the order they are hashed in.
-static FILES: [Asset; 15] = [
+static FILES: [Asset; 11] = [
     Asset {
         name: "app.js",
         content_type: JS,
@@ -35,14 +35,9 @@ static FILES: [Asset; 15] = [
         bytes: include_bytes!("../web/card.js"),
     },
     Asset {
-        name: "chart-echarts.js",
+        name: "chart.js",
         content_type: JS,
-        bytes: include_bytes!("../web/chart-echarts.js"),
-    },
-    Asset {
-        name: "chart-vega.js",
-        content_type: JS,
-        bytes: include_bytes!("../web/chart-vega.js"),
+        bytes: include_bytes!("../web/chart.js"),
     },
     Asset {
         name: "controls.js",
@@ -83,21 +78,6 @@ static FILES: [Asset; 15] = [
         name: "echarts.min.js",
         content_type: JS,
         bytes: include_bytes!("../vendor/echarts.min.js"),
-    },
-    Asset {
-        name: "vega-interpreter.mjs",
-        content_type: JS,
-        bytes: include_bytes!("../vendor/vega-interpreter.mjs"),
-    },
-    Asset {
-        name: "vega-lite.min.js",
-        content_type: JS,
-        bytes: include_bytes!("../vendor/vega-lite.min.js"),
-    },
-    Asset {
-        name: "vega.min.js",
-        content_type: JS,
-        bytes: include_bytes!("../vendor/vega.min.js"),
     },
 ];
 

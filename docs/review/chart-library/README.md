@@ -1,13 +1,19 @@
 # Chart library: Vega-Lite or Apache ECharts
 
+**Decision: ECharts, by the operator, 2026-11-13.** Vega-Lite was then removed:
+its adapter, vendored files, example, fixtures and format key are gone, and the
+Vega-Lite screenshots and transition strip below were deleted. Everything that
+was removed is in the commit that added it, `9c9e16f` (the images) and `46025ac`
+(the code); `git show 9c9e16f --stat` lists the images. The numbers below are
+kept as the record of the comparison, and the paths they name are as of those
+commits. The look of the page today is compared against
+[`docs/visuals/`](../../visuals/), not against the ECharts images here, which
+predate the polish that followed the decision.
+
 For the operator's choice, by eye ([design](../../design.md), sections 2 and 9).
-The same board, [`earthquakes-vega`](../../../examples/earthquakes-vega/board.yml)
-and [`earthquakes-echarts`](../../../examples/earthquakes-echarts/board.yml), is
-drawn by each library under the same house theme, from the same queries over the
-same invented data. This page states facts; it does not pick a library. Both
-implementations stay on the branch until the choice is made, and the loser is
-then removed (its adapter in `web/`, its files in `vendor/`, its key in the
-board format, its example).
+The same board was drawn by each library under the same house theme, from the
+same queries over the same invented data. This page states facts; it does not
+pick a library.
 
 All measurements are from one Mac (aarch64) under Docker, with Chromium
 headless inside a container on a Docker network with no route out, nothing
@@ -16,13 +22,13 @@ not the visitor's `system-ui`.
 
 ## What to look at
 
-| | Vega-Lite | ECharts |
-|---|---|---|
-| Light, 1440 px | [image](earthquakes-vega-light-1440.png) | [image](earthquakes-echarts-light-1440.png) |
-| Dark, 1440 px | [image](earthquakes-vega-dark-1440.png) | [image](earthquakes-echarts-dark-1440.png) |
-| Light, 375 px | [image](earthquakes-vega-light-375.png) | [image](earthquakes-echarts-light-375.png) |
-| Dark, 375 px | [image](earthquakes-vega-dark-375.png) | [image](earthquakes-echarts-dark-375.png) |
-| Transition after a filter change (all classes to 5 and above) | [8 frames](transition-earthquakes-vega.png) | [8 frames](transition-earthquakes-echarts.png) |
+| | ECharts (Vega-Lite's are in `9c9e16f`) |
+|---|---|
+| Light, 1440 px | [image](earthquakes-echarts-light-1440.png) |
+| Dark, 1440 px | [image](earthquakes-echarts-dark-1440.png) |
+| Light, 375 px | [image](earthquakes-echarts-light-375.png) |
+| Dark, 375 px | [image](earthquakes-echarts-dark-375.png) |
+| Transition after a filter change (all classes to 5 and above) | [8 frames](transition-earthquakes-echarts.png) |
 
 A transition image is eight frames of the first chart's card, read left to right
 and then the second row, about 60 ms apart (Vega-Lite at +0 +50 +133 +183 +233

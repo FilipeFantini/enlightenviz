@@ -4,19 +4,19 @@ queries:
   a:
     sql: select day, events from earthquakes_daily
 charts:
-  - title: Known fields, including one a transform creates
+  - title: Known columns, in encode and in dimensions
     query: a
-    vega_lite:
-      mark: bar
-      transform:
-        - {calculate: "datum.events * 2", as: double}
-      encoding:
-        x: {field: day, type: temporal}
-        y: {field: double, type: quantitative}
-  - title: A field the query does not return
+    echarts:
+      dimensions: [day, events]
+      series:
+        - {type: bar, encode: {x: day, y: events}}
+        - {type: line, encode: {x: day, y: events}}
+      visualMap: {dimension: events}
+      xAxis: {type: category}
+  - title: A column the query does not return
     query: a
-    vega_lite:
-      mark: bar
-      encoding:
-        x: {field: day, type: temporal}
-        y: {field: event_count, type: quantitative}
+    echarts:
+      xAxis: {type: category}
+      series:
+        - {type: bar, encode: {x: day, y: events}}
+        - {type: bar, encode: {x: day, y: event_count}}

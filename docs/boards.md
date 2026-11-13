@@ -5,12 +5,8 @@ accepts, the filters that set those parameters, and the stats and charts that
 show the results. This page describes the format
 completely; the JSON Schema of the same format is printed by
 `enlightenviz schema` and committed as
-[`schema/board.schema.json`](../schema/board.schema.json). Working examples are
-[`examples/earthquakes-vega/board.yml`](../examples/earthquakes-vega/board.yml)
-and
-[`examples/earthquakes-echarts/board.yml`](../examples/earthquakes-echarts/board.yml):
-the same board, with the charts written for each of the two chart libraries
-under comparison.
+[`schema/board.schema.json`](../schema/board.schema.json). A working example is
+[`examples/earthquakes/board.yml`](../examples/earthquakes/board.yml).
 
 What exists today is the format, `validate`, the JSON route that answers a
 query, and the page that draws a board in the browser (see "The page"). There
@@ -168,66 +164,49 @@ stats:
 |---|---|---|---|
 | `title` | text | yes | The title of the chart. |
 | `query` | text | yes | The name of a query of this board. |
-| `vega_lite` | map | one of the two | A [Vega-Lite](https://vega.github.io/vega-lite/) specification. |
-| `echarts` | map | one of the two | An [Apache ECharts](https://echarts.apache.org/) option. |
+| `echarts` | map | yes | An [Apache ECharts](https://echarts.apache.org/) option. |
 | `palette` | `categorical` or `ordered` | no | Where the series take their colours from. See below. |
 
-*During the comparison of the two libraries a chart has either key, exactly
-one. Which library stays is decided by the operator, by eye; the other key is
-then removed.*
+The option is kept as written, and **never carries data or a URL**: the page adds
+the rows of the chart's query itself, as the option's dataset. `validate`
+refuses, anywhere in an option, the keys `data`, `datasets`, `dataset`, `url` and
+`href`, and any string that starts `http://`, `https://`, `//` or `image://` (a
+symbol or a link that would make the browser request something). The one static
+dataset is the world outline (Natural Earth 110m, without Antarctica), which the
+page provides under the reserved name `world`: a `geo` or a series may say
+`map: world`. The page draws it with longitude and latitude at one scale
+(equirectangular), and sizes the card of a chart that draws it to the outline's
+proportions.
 
-The specification is kept as written, and **never carries data or a URL**: the
-page adds the rows of the chart's query itself. `validate` refuses, anywhere in
-a specification, the keys `data`, `datasets`, `dataset`, `url` and `href`, and
-any string that starts `http://`, `https://`, `//` or `image://` (a symbol or
-a link that would make the browser request something). The one static dataset
-is the world outline (Natural Earth 110m, without Antarctica), which the page
-provides under the reserved name `world`: in Vega-Lite a layer may say
-`data: {name: world}` (that exact object, nothing else), and in ECharts a
-`geo` or a series may say `map: world`. The page draws the outline with
-longitude and latitude at one scale (equirectangular) in both libraries.
-
-The page sizes the chart to its card, so do not write `width`, `height` or
-`autosize`. It also sets the house theme (colours, fonts, gridlines, bar
-thickness and corners, point sizes, tooltip, animation) underneath what the
-specification says, so a specification that says nothing about style looks
-finished, and one that says something wins.
+The page sizes the chart to its card, so do not write the size of the chart. It
+also sets the house theme (colours, fonts, gridlines, bar thickness and corners,
+point sizes, tooltip, hover emphasis, animation, the 24 px hit area of a
+scatter's points) underneath what the option says, so an option that says
+nothing about style looks finished, and one that says something wins. Write the
+series with `encode` (which columns are x and y) and let the page do the rest.
 
 **`palette`.** A chart's series take the eight categorical colours, in their
 fixed order, which is what `categorical` (the default) means. `ordered` is for
 classes that have an order, such as magnitude classes: the series take the
 four-step blue ramp, from weakest to strongest, in the order they are drawn.
-A colour is chosen by position in a list the author writes (a `scale.domain` in
-Vega-Lite, the order of `series` in ECharts), not by the rows that happen to be
-present, so a filter that removes a category does not repaint the others. In
-Vega-Lite an `ordinal` colour already uses the ramp, so `palette` matters there
-only for `nominal` colours; in ECharts it is the only way to ask for the ramp
-without writing a colour that would be wrong in the other colour scheme.
+It is a field of the board and not part of the option because an ECharts option
+can only name colours as values, and a value that is right in the light colour
+scheme is wrong in the dark one. A colour is chosen by the position of the
+series in the option, not by the rows that happen to be present, so a filter that
+removes a category does not repaint the others.
 
-### What `validate` checks in a specification
+### What `validate` checks in an option
 
-It reads two kinds of thing, both only with a database (it needs the query's
-columns; without one the check is skipped, and `validate` says so).
-
-**Vega-Lite.** Every `"field": "<name>"` anywhere in the specification must be a
-column the query returns, or a name a transform creates with `as`
-(`{calculate: "...", as: double}`, `{fold: [...], as: [key, value]}`). A field
-with a path (`a.b`, `a[0]`) is accepted when its first part is a column; `\.`
-writes a literal dot. Limits: a name a transform creates without writing `as`
-(such as an aggregate's default name) is reported as unknown, so write `as`; the
-plural `fields` and `groupby` lists are not read; a `field` that is not a
-string is skipped. A column whose name contains a dot (`4.5`) is read by Vega
-as a path: avoid such names, or write `\.` in the specification.
-
-**ECharts.** ECharts has no `field` key. `validate` reads the places where an
-option names a column of the rows: every value in `encode` (a name or a list of
-names; a number is a position and is skipped), every name in `dimensions` (a
-string, or an object's `name`), and `dimension` inside `visualMap`. What it
-**cannot see**: a column written in a tooltip's `formatter` template
-(`{@name}`), `series.name` and other text, a column reached by position, and
-anything the page adds. A misspelt name there draws nothing or the wrong thing,
-and `validate` stays silent. The Vega-Lite check is deeper, because a
-Vega-Lite specification is a closed grammar and an ECharts option is not.
+With a database (it needs the query's columns; without one the check is skipped,
+and `validate` says so), `validate` reads the places where an option names a
+column of the rows: every value in `encode` (a name or a list of names; a number
+is a position and is skipped), every name in `dimensions` (a string, or an
+object's `name`), and `dimension` inside `visualMap`; each must be a column the
+query returns. What it **cannot see**: a column written in a tooltip's
+`formatter` template (`{@name}`), `series.name` and other text, a column reached
+by position, anything the page adds, and whether an option key exists at all:
+ECharts has no published schema to check an option against. A misspelt key draws
+nothing or the wrong thing, and `validate` stays silent.
 
 ## The page
 
@@ -335,8 +314,7 @@ reported at the `sql` key, with the line within the query in the message.
 | `board-duplicate` | Two files use the same board id. |
 | `board-no-charts` | `charts` is empty. |
 | `chart-unknown-query` | A chart reads a query the board does not declare. |
-| `chart-spec-key` | A chart has neither `vega_lite` nor `echarts`, or both. |
-| `chart-spec-forbidden` | A specification carries data or a link: `data`, `datasets`, `dataset`, `url`, `href`, or a string that starts `http://`, `https://`, `//`, `image://`. |
+| `chart-spec-forbidden` | An option carries data or a link: `data`, `datasets`, `dataset`, `url`, `href`, or a string that starts `http://`, `https://`, `//`, `image://`. |
 | `filter-unknown-param` | A filter drives a parameter no query declares. |
 | `filter-duplicate` | Two filters drive one parameter. |
 | `filter-param-conflict` | The queries a filter drives declare its parameter with different types, defaults or `max_items`. |
@@ -360,7 +338,7 @@ reported at the `sql` key, with the line within the query in the message.
 | `sql-prepare-timeout` | (With a database) preparing ran past the statement timeout. |
 | `sql-not-a-select` | (With a database) the statement is not a read-only `SELECT`. |
 | `query-column-duplicate` | (With a database) two output columns have one name. |
-| `chart-unknown-field` | (With a database) a chart draws a field that is no column and no `as` (Vega-Lite), or names a column in `encode`, `dimensions` or `visualMap` that the query does not return (ECharts). |
+| `chart-unknown-field` | (With a database) a chart names a column in `encode`, `dimensions` or `visualMap` that the query does not return. |
 | `stat-unknown-column` | (With a database) a stat's `value` is not a column of its query. |
 | `filter-unknown-column` | (With a database) an `options_from` `value` or `label` is not a column of its query. |
 

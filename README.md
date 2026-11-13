@@ -4,9 +4,10 @@ A small server that draws dashboards written as code: SQL and chart
 descriptions in Git, served with filters and live updates from a read-only
 database connection.
 
-**Status: a walking skeleton, with a page.** The first slice works end to end for
-data; the second draws a board in the browser, twice, so that the chart library
-can be chosen by eye (`docs/review/chart-library/`). Read [`docs/design.md`](docs/design.md): what it is
+**Status: a walking skeleton, with a page.** Boards are drawn in the browser with
+Apache ECharts, chosen over Vega-Lite by the operator, by eye
+([the comparison](docs/review/chart-library/README.md)). The baseline images that
+a change to the look is compared against are in [`docs/visuals/`](docs/visuals/). Read [`docs/design.md`](docs/design.md): what it is
 for, what it will not do, its security model, and the criteria by which the
 first version is judged or the project abandoned.
 
@@ -31,9 +32,9 @@ Maintained by one person, with AI agents writing the code.
 - **The page**: filters above the content, stat tiles, and charts drawn in the
   browser, with the filters in the URL, animation to new data, tooltips (also by
   keyboard), a table view, explicit empty and error states, light and dark, from
-  375 to 1440 px. Plain ES modules and CSS, no build step; the chart libraries are
-  vendored under [`vendor/`](vendor/README.md) and embedded in the binary, and every
-  page carries a strict content security policy. See "The page" in
+  375 to 1440 px. Plain ES modules and CSS, no build step; ECharts is vendored
+  under [`vendor/`](vendor/README.md) and embedded in the binary, and every page
+  carries a strict content security policy. See "The page" in
   [`docs/boards.md`](docs/boards.md).
 - **Safe by construction.** The browser names a query and gives typed values;
   every value is checked against its declared type, sent as text and cast by the
@@ -48,7 +49,8 @@ Not yet: live updates, other data sources, dbt, login.
 ## Try it
 
 You need Docker and nothing else. This starts a throwaway Postgres, loads the
-invented data of the example board, builds the image and serves the board.
+invented data of the example board, builds the image and serves the board; open
+`http://127.0.0.1:8080/` for the page.
 
 ```sh
 docker network create enlightenviz-net
@@ -57,7 +59,7 @@ docker run -d --name enlightenviz-pg --network enlightenviz-net \
 # wait a few seconds for it to start, then:
 docker exec -i enlightenviz-pg psql -U postgres -v ON_ERROR_STOP=1 < examples/earthquakes/schema.sql
 docker exec enlightenviz-pg psql -U postgres -c \
-  "create role enlightenviz_reader login password 'reader-demo'; grant select on earthquakes_daily to enlightenviz_reader"
+  "create role enlightenviz_reader login password 'reader-demo'; grant select on earthquake_events to enlightenviz_reader"
 
 docker build -t enlightenviz-image:dev .
 docker run -d --name enlightenviz-server --network enlightenviz-net -p 127.0.0.1:8080:8080 \
@@ -66,25 +68,8 @@ docker run -d --name enlightenviz-server --network enlightenviz-net -p 127.0.0.1
   -e ENLIGHTENVIZ_ALLOW_UNENCRYPTED_DATABASE=true \
   enlightenviz-image:dev
 
-curl 'http://127.0.0.1:8080/api/boards/earthquakes/queries/by_day?from=2024-01-29&regions=Andes'
+curl 'http://127.0.0.1:8080/api/boards/earthquakes/queries/daily?from=2024-01-20&regions=Andes'
 curl http://127.0.0.1:8080/healthz
-```
-
-To see the page, serve the two boards that draw the same earthquakes with each of
-the two chart libraries (they share the data in `examples/earthquakes/schema.sql`,
-which the commands above loaded; the reader needs the new table too) and open
-`http://127.0.0.1:8080/`:
-
-```sh
-docker exec enlightenviz-pg psql -U postgres -c "grant select on earthquake_events to enlightenviz_reader"
-mkdir /tmp/enlightenviz-boards
-cp examples/earthquakes-vega/board.yml /tmp/enlightenviz-boards/vega.yml
-cp examples/earthquakes-echarts/board.yml /tmp/enlightenviz-boards/echarts.yml
-docker rm -f enlightenviz-server
-docker run -d --name enlightenviz-server --network enlightenviz-net -p 127.0.0.1:8080:8080 \
-  --read-only --cap-drop ALL -v /tmp/enlightenviz-boards:/boards:ro \
-  -e ENLIGHTENVIZ_DATABASE_URL=postgres://enlightenviz_reader:reader-demo@enlightenviz-pg/postgres \
-  -e ENLIGHTENVIZ_ALLOW_UNENCRYPTED_DATABASE=true enlightenviz-image:dev
 ```
 
 Clean up with `docker rm -f enlightenviz-server enlightenviz-pg`,
@@ -132,18 +117,16 @@ Each of these is a decision to take later, not an oversight.
   server's name verified, is still to come.
 - **No live updates.** The page asks for its data when it loads and when a filter
   changes. See [the design](docs/design.md).
-- **Two chart libraries are in the binary, for the comparison.** A chart is
-  written for Vega-Lite (`vega_lite`) or for Apache ECharts (`echarts`); the
-  operator chooses by eye, and the other is then removed. That removes about 1 MB
-  of embedded script, and its example.
-- **No gzip.** The server sends the assets as they are (about 1.2 MB of script
-  for an ECharts board, 0.8 MB for a Vega-Lite one; about a third of that
-  compressed). Compression belongs to the proxy in front, like rate limits.
-- **No line or area chart is drawn by an example,** so their house styles are
+- **No selection in one chart that filters another.** The design lists it; a
+  filter is the only way to narrow a view.
+- **No gzip.** The server sends the assets as they are (about 1.2 MB of script,
+  about a third of that compressed). Compression belongs to the proxy in front,
+  like rate limits.
+- **No line or area chart is drawn by the example,** so their house styles are
   set but untested.
-- **The page's text from data is safe, the specification is not data.** A board
-  is trusted code: its specification is the author's. What is refused in it (data,
-  URLs) is a rule of the format, not a defence against a hostile author.
+- **The option is the author's.** A board is trusted code: what `validate`
+  refuses in an option (data, URLs) is a rule of the format, not a defence
+  against a hostile author.
 - **Rate limits, and slow clients, belong to the proxy in front.** The server
   bounds its database use (pool, timeouts, row limit) but accepts any number of
   client connections and has no header or body timeouts.
@@ -170,11 +153,11 @@ Each of these is a decision to take later, not an oversight.
 On one Mac (aarch64) under Docker, with the example board and a pool of 4,
 resident memory of the server was 2.3 MiB right after start and 2.7 MiB after 1,000
 sequential and 200 concurrent requests, with a peak of 6.8 MiB during the
-concurrent burst; the image was 3.9 MB. With the page and both chart libraries
-embedded (the second slice) it is 4.4 MiB after start, 4.55 MiB after 1,000 page
-loads of five requests each (a page, two libraries, a definition and a query), with
-a peak of 5.2 MiB, and the image is 6.9 MB. Design section 10 sets a ceiling of
-64 MiB. This is a measurement, not a CI gate yet.
+concurrent burst; the image was 3.9 MB. With the page and ECharts embedded it was 3.7 MiB after
+start and 3.75 MiB after 1,000 page loads of five requests each (a page,
+`echarts.min.js`, `app.js`, a definition and a query), with a peak of 3.75 MiB,
+and the image was 5.8 MB. Design section 10 sets a ceiling of 64 MiB. This is a
+measurement, not a CI gate yet.
 
 ## Development
 

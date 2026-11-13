@@ -11,7 +11,7 @@ use saphyr::{LoadableYamlNode, MarkedYaml, Scalar, ScanError, YamlData};
 use saphyr_parser::{Event, Parser};
 use serde_json::{Map, Number, Value};
 
-/// How deep a board may nest. A Vega-Lite specification stays far below this;
+/// How deep a board may nest. A chart specification stays far below this;
 /// the limit only stops a hostile file from exhausting the stack.
 const MAX_DEPTH: usize = 100;
 

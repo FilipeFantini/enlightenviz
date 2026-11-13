@@ -5,7 +5,7 @@
 #
 #   tests/browser/run.sh smoke               the smoke test (exit code 1 on failure)
 #   tests/browser/run.sh capture <out-dir>   the screenshots and the transition
-#                                            frames of docs/review/chart-library
+#                                            frames of docs/visuals
 #
 # Everything it creates is named enlightenviz-closed-* or enlightenviz-*:test,
 # and the containers, the network and the scratch directory are removed on
@@ -41,11 +41,10 @@ sleep 2
 until docker exec "$PG" pg_isready -U postgres >/dev/null 2>&1; do sleep 1; done
 docker exec -i "$PG" psql -U postgres -v ON_ERROR_STOP=1 -q <"$ROOT/examples/earthquakes/schema.sql" >/dev/null
 docker exec "$PG" psql -U postgres -v ON_ERROR_STOP=1 -q -c \
-  "create role enlightenviz_reader login password 'reader-demo'; grant select on earthquakes_daily, earthquake_events to enlightenviz_reader" >/dev/null
+  "create role enlightenviz_reader login password 'reader-demo'; grant select on earthquake_events to enlightenviz_reader" >/dev/null
 
 mkdir "$SCRATCH/boards"
-cp "$ROOT/examples/earthquakes-vega/board.yml" "$SCRATCH/boards/earthquakes-vega.yml"
-cp "$ROOT/examples/earthquakes-echarts/board.yml" "$SCRATCH/boards/earthquakes-echarts.yml"
+cp "$ROOT/examples/earthquakes/board.yml" "$SCRATCH/boards/earthquakes.yml"
 docker run -d --name "$SERVER" --network "$NET" --read-only --cap-drop ALL \
   -v "$SCRATCH/boards:/boards:ro" \
   -e ENLIGHTENVIZ_DATABASE_URL="postgres://enlightenviz_reader:reader-demo@$PG/postgres" \
@@ -68,11 +67,11 @@ done
 
 case "$MODE" in
   smoke)
-    browser enlightenviz-browser:test node smoke.mjs "http://$SERVER:8080" earthquakes-vega earthquakes-echarts
+    browser enlightenviz-browser:test node smoke.mjs "http://$SERVER:8080" earthquakes
     ;;
   capture)
     mkdir -p "$OUT"
-    browser -v "$(cd "$OUT" && pwd):/out" enlightenviz-browser:test node capture.mjs "http://$SERVER:8080" /out earthquakes-vega earthquakes-echarts
+    browser -v "$(cd "$OUT" && pwd):/out" enlightenviz-browser:test node capture.mjs "http://$SERVER:8080" /out earthquakes
     ;;
   *)
     echo "unknown mode $MODE" >&2

@@ -191,18 +191,8 @@ pub enum Palette {
     Ordered,
 }
 
-/// The chart library that draws a chart.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-pub enum Engine {
-    #[serde(rename = "vega_lite")]
-    VegaLite,
-    #[serde(rename = "echarts")]
-    Echarts,
-}
-
-/// A chart: a specification, in the key of the library that draws it, that
-/// draws the result of a query. The specification carries no data: the page
-/// adds the rows of the query.
+/// A chart: an Apache ECharts option that draws the result of a query. The
+/// option carries no data: the page adds the rows of the query.
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Chart {
@@ -210,27 +200,13 @@ pub struct Chart {
     pub title: String,
     /// The name of the query this chart draws; a key of `queries`.
     pub query: String,
-    /// A Vega-Lite specification, kept as it is. Give this or `echarts`.
-    #[serde(default)]
-    pub vega_lite: Option<Map<String, Value>>,
-    /// An Apache ECharts option, kept as it is. Give this or `vega_lite`.
-    #[serde(default)]
-    pub echarts: Option<Map<String, Value>>,
+    /// An Apache ECharts option, kept as it is. `validate` refuses data and
+    /// links in it, and checks that the columns `encode`, `dimensions` and
+    /// `visualMap` name are columns of the query.
+    pub echarts: Map<String, Value>,
     /// The colours the series take: `categorical` (default) or `ordered`.
     #[serde(default)]
     pub palette: Option<Palette>,
-}
-
-impl Chart {
-    /// The specification and the library that draws it, when exactly one of
-    /// the two keys is present.
-    pub fn spec(&self) -> Option<(Engine, &Map<String, Value>)> {
-        match (&self.vega_lite, &self.echarts) {
-            (Some(spec), None) => Some((Engine::VegaLite, spec)),
-            (None, Some(spec)) => Some((Engine::Echarts, spec)),
-            _ => None,
-        }
-    }
 }
 
 /// The JSON Schema of a board, pretty-printed, with a trailing newline.

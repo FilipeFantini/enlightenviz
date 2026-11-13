@@ -15,4 +15,3 @@ pub mod server;
 pub mod source;
 pub mod spec;
 pub mod sql;
-pub mod vega;

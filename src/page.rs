@@ -11,7 +11,7 @@ use serde::Serialize;
 use serde_json::{Map, Value};
 
 use crate::assets::Assets;
-use crate::board::{Board, Chart, Control, Engine, Palette, StatFormat};
+use crate::board::{Board, Chart, Control, Palette, StatFormat};
 use crate::param::ParamType;
 
 /// Sent with every HTML response. Nothing may load from another host, no
@@ -21,30 +21,14 @@ pub const CONTENT_SECURITY_POLICY: &str = "default-src 'none'; script-src 'self'
 /// What the server keeps of a board for its page.
 pub struct Page {
     pub title: String,
-    /// The libraries the board's charts need, in load order.
-    libraries: Vec<&'static str>,
     /// The JSON of `GET /api/boards/{board}`, written once at start.
     pub definition: String,
 }
 
 impl Page {
     pub fn new(board: &Board) -> Result<Page, String> {
-        let mut libraries: Vec<&'static str> = Vec::new();
-        for chart in &board.charts {
-            let needs: &[&'static str] = match chart.spec() {
-                Some((Engine::VegaLite, _)) => &["vega.min.js", "vega-lite.min.js"],
-                Some((Engine::Echarts, _)) => &["echarts.min.js"],
-                None => &[],
-            };
-            for name in needs {
-                if !libraries.contains(name) {
-                    libraries.push(name);
-                }
-            }
-        }
         Ok(Page {
             title: board.title.clone(),
-            libraries,
             definition: definition(board)?,
         })
     }
@@ -100,17 +84,13 @@ pub fn index(pages: &BTreeMap<String, Page>, assets: &Assets) -> String {
 /// The shell of a board: the scripts that draw it, and an empty container.
 pub fn board(page: &Page, assets: &Assets) -> String {
     let mut html = head(&page.title, assets);
-    for library in &page.libraries {
-        html.push_str(&format!(
-            "<script defer src=\"{}\"></script>\n",
-            assets.path(library)
-        ));
-    }
     html.push_str(&format!(
-        "<script type=\"module\" src=\"{}\"></script>\n</head>\n<body>\n\
+        "<script defer src=\"{}\"></script>\n\
+         <script type=\"module\" src=\"{}\"></script>\n</head>\n<body>\n\
          <div id=\"app\"><p class=\"loading\">Loading the board...</p></div>\n\
          <noscript><p class=\"loading\">This page needs JavaScript to draw the charts.</p></noscript>\n\
          </body>\n</html>\n",
+        assets.path("echarts.min.js"),
         assets.path("app.js")
     ));
     html
@@ -149,7 +129,6 @@ struct StatView<'a> {
 struct ChartView<'a> {
     title: &'a str,
     query: &'a str,
-    engine: Engine,
     palette: Palette,
     spec: &'a Map<String, Value>,
 }
@@ -170,23 +149,18 @@ struct Definition<'a> {
     queries: BTreeMap<&'a str, QueryView<'a>>,
 }
 
-fn chart_view(chart: &Chart) -> Result<ChartView<'_>, String> {
-    let (engine, spec) = chart
-        .spec()
-        .ok_or_else(|| format!("the chart `{}` has no single specification", chart.title))?;
-    Ok(ChartView {
+fn chart_view(chart: &Chart) -> ChartView<'_> {
+    ChartView {
         title: &chart.title,
         query: &chart.query,
-        engine,
         palette: chart.palette.unwrap_or(Palette::Categorical),
-        spec,
-    })
+        spec: &chart.echarts,
+    }
 }
 
 /// The board as the page needs it. A board that reaches here has passed
-/// validation, so every filter's parameter is declared by some query and every
-/// chart has one specification; if not, that is an error here, not a page that
-/// silently lacks a filter or a chart.
+/// validation, so every filter's parameter is declared by some query; if not,
+/// that is an error here, not a page that silently lacks a filter.
 fn definition(board: &Board) -> Result<String, String> {
     let queries = board
         .queries
@@ -256,11 +230,7 @@ fn definition(board: &Board) -> Result<String, String> {
         text: board.text.as_deref(),
         filters,
         stats,
-        charts: board
-            .charts
-            .iter()
-            .map(chart_view)
-            .collect::<Result<Vec<_>, String>>()?,
+        charts: board.charts.iter().map(chart_view).collect(),
         queries,
     })
     .map_err(|e| format!("the board's definition cannot be written: {e}"))

@@ -2,65 +2,37 @@
 //!
 //! [`offline`] needs only the file. [`columns`] needs the columns a query
 //! returns, which only a database can say, and checks every place that names
-//! one: a chart's fields, a stat's value, a filter's option columns.
+//! one: a chart's `encode`, a stat's value, a filter's option columns.
 
 use std::collections::{HashMap, HashSet};
 
 use serde_json::Value;
 
-use crate::board::{Board, Control, Engine};
+use crate::board::{Board, Control};
 use crate::catalog::LoadedBoard;
 use crate::diagnostic::Diagnostic;
 use crate::echarts;
 use crate::param::{ParamType, Scalar, default_item, type_name};
 use crate::source::{Document, child};
 use crate::spec;
-use crate::vega;
 
 /// Checks that need no database: the specifications, the filters and the
 /// stats.
 pub fn offline(file: &str, doc: &Document, board: &Board, diagnostics: &mut Vec<Diagnostic>) {
     for (index, chart) in board.charts.iter().enumerate() {
-        let at = child("/charts", &index.to_string());
-        match (&chart.vega_lite, &chart.echarts) {
-            (None, None) => diagnostics.push(Diagnostic::new(
+        let at = child(&child("/charts", &index.to_string()), "echarts");
+        let found = spec::forbidden(&Value::Object(chart.echarts.clone()), &at);
+        for f in found {
+            diagnostics.push(Diagnostic::new(
                 file,
-                doc.line(&at),
-                "chart-spec-key",
-                format!("the chart `{}` has no specification", chart.title),
-                "add `vega_lite` or `echarts` with the chart's specification",
-            )),
-            (Some(_), Some(_)) => diagnostics.push(Diagnostic::new(
-                file,
-                doc.line(&child(&at, "echarts")),
-                "chart-spec-key",
+                doc.line(&f.pointer),
+                "chart-spec-forbidden",
                 format!(
-                    "the chart `{}` has both `vega_lite` and `echarts`; a chart is drawn by one library",
-                    chart.title
+                    "the chart `{}` has {} in its specification: a specification carries no data and names no URL",
+                    chart.title, f.what
                 ),
-                "keep one of the two keys",
-            )),
-            _ => {}
-        }
-        if let Some((engine, map)) = chart.spec() {
-            let key = if engine == Engine::VegaLite {
-                "vega_lite"
-            } else {
-                "echarts"
-            };
-            let found = spec::forbidden(engine, &Value::Object(map.clone()), &child(&at, key));
-            for f in found {
-                diagnostics.push(Diagnostic::new(
-                    file,
-                    doc.line(&f.pointer),
-                    "chart-spec-forbidden",
-                    format!(
-                        "the chart `{}` has {} in its specification: a specification carries no data and names no URL",
-                        chart.title, f.what
-                    ),
-                    "remove it; the page adds the rows of the chart's query. The one static dataset is the world outline: `data: {name: world}` in Vega-Lite, `map: world` in ECharts",
-                ));
-            }
+                "remove it; the page adds the rows of the chart's query. The one static dataset is the world outline: `map: world`",
+            ));
         }
     }
     filters(file, doc, board, diagnostics);
@@ -386,28 +358,18 @@ pub fn columns(loaded: &LoadedBoard, query: &str, columns: &HashSet<&str>) -> Ve
         if chart.query != query {
             continue;
         }
-        let Some((engine, map)) = chart.spec() else {
-            continue;
-        };
-        let value = Value::Object(map.clone());
-        let fields = match engine {
-            Engine::VegaLite => vega::collect(&value, &format!("/charts/{index}/vega_lite")),
-            Engine::Echarts => echarts::collect(&value, &format!("/charts/{index}/echarts")),
-        };
+        let value = Value::Object(chart.echarts.clone());
+        let fields = echarts::collect(&value, &format!("/charts/{index}/echarts"));
         for (pointer, field) in &fields.used {
-            if !vega::is_known(field, columns, &fields.created) {
-                let (created, how) = match engine {
-                    Engine::VegaLite => (
-                        " and no transform creates with `as`",
-                        format!(", or add `as: {field}` to the transform that creates it"),
-                    ),
-                    Engine::Echarts => ("", String::new()),
-                };
+            if !columns.contains(field.as_str()) {
                 diagnostics.push(unknown(
                     pointer,
                     "chart-unknown-field",
-                    format!("the chart `{}` draws the field `{field}`, which the query `{query}` does not return{created}", chart.title),
-                    format!("use one of the columns ({have}){how}"),
+                    format!(
+                        "the chart `{}` names the column `{field}`, which the query `{query}` does not return",
+                        chart.title
+                    ),
+                    format!("use one of the columns: {have}"),
                 ));
             }
         }

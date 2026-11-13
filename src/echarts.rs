@@ -19,10 +19,15 @@
 use serde_json::Value;
 
 use crate::source::child;
-use crate::vega::Fields;
+
+/// The columns an option names, each with the JSON Pointer of where.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct Fields {
+    pub used: Vec<(String, String)>,
+}
 
 /// Collects the column names of `spec`, which sits at `pointer` in its
-/// document. No name is ever created by an ECharts option.
+/// document.
 pub fn collect(spec: &Value, pointer: &str) -> Fields {
     let mut fields = Fields::default();
     walk(spec, pointer, false, &mut fields);
@@ -112,7 +117,6 @@ mod tests {
             names(&fields),
             ["a", "b", "day", "lat", "lng", "magnitude", "region"]
         );
-        assert!(fields.created.is_empty());
         assert!(
             fields
                 .used

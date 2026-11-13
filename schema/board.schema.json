@@ -63,17 +63,13 @@
   ],
   "$defs": {
     "Chart": {
-      "description": "A chart: a specification, in the key of the library that draws it, that\ndraws the result of a query. The specification carries no data: the page\nadds the rows of the query.",
+      "description": "A chart: an Apache ECharts option that draws the result of a query. The\noption carries no data: the page adds the rows of the query.",
       "type": "object",
       "properties": {
         "echarts": {
-          "description": "An Apache ECharts option, kept as it is. Give this or `vega_lite`.",
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": true,
-          "default": null
+          "description": "An Apache ECharts option, kept as it is. `validate` refuses data and\nlinks in it, and checks that the columns `encode`, `dimensions` and\n`visualMap` name are columns of the query.",
+          "type": "object",
+          "additionalProperties": true
         },
         "palette": {
           "description": "The colours the series take: `categorical` (default) or `ordered`.",
@@ -94,21 +90,13 @@
         "title": {
           "description": "The title of the chart.",
           "type": "string"
-        },
-        "vega_lite": {
-          "description": "A Vega-Lite specification, kept as it is. Give this or `echarts`.",
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": true,
-          "default": null
         }
       },
       "additionalProperties": false,
       "required": [
         "title",
-        "query"
+        "query",
+        "echarts"
       ]
     },
     "Control": {

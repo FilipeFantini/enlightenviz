@@ -10,4 +10,4 @@ queries:
 charts:
   - title: C
     query: a
-    vega_lite: {mark: bar}
+    echarts: {series: []}

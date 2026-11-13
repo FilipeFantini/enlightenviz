@@ -99,7 +99,7 @@ jobs:
           persist-credentials: false
       # Builds the server image and a headless Chromium image, puts both and a
       # throwaway Postgres on a Docker network with no route out (--internal),
-      # and drives each example board in the browser: every chart draws, the
+      # and drives the example board in the browser: every chart draws, the
       # console has no error and no CSP violation, and no request leaves for
       # another host. The base images are pinned by digest; Chromium itself comes
       # from Alpine's package repository for that release.

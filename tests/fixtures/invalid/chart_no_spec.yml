@@ -1,0 +1,8 @@
+board: chart-no-spec
+title: A chart without a specification
+queries:
+  a:
+    sql: select 1 as n
+charts:
+  - title: No specification
+    query: a
