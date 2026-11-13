@@ -21,17 +21,17 @@ use crate::spec;
 pub fn offline(file: &str, doc: &Document, board: &Board, diagnostics: &mut Vec<Diagnostic>) {
     for (index, chart) in board.charts.iter().enumerate() {
         let at = child(&child("/charts", &index.to_string()), "echarts");
-        let found = spec::forbidden(&Value::Object(chart.echarts.clone()), &at);
-        for f in found {
+        let option = Value::Object(chart.echarts.clone());
+        let problems = spec::forbidden_in(&option, &at)
+            .into_iter()
+            .chain(spec::series_problems(&option, &at));
+        for problem in problems {
             diagnostics.push(Diagnostic::new(
                 file,
-                doc.line(&f.pointer),
-                "chart-spec-forbidden",
-                format!(
-                    "the chart `{}` has {} in its specification: a specification carries no data and names no URL",
-                    chart.title, f.what
-                ),
-                "remove it; the page adds the rows of the chart's query. The one static dataset is the world outline: `map: world`",
+                doc.line(&problem.pointer),
+                problem.rule,
+                format!("the chart `{}` {}", chart.title, problem.what),
+                problem.fix,
             ));
         }
     }

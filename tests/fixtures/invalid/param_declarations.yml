@@ -16,4 +16,4 @@ queries:
 charts:
   - title: A
     query: a
-    echarts: {series: []}
+    echarts: {series: [{type: bar}]}

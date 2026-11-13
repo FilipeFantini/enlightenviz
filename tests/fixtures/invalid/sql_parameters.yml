@@ -14,4 +14,4 @@ queries:
 charts:
   - title: A
     query: unused
-    echarts: {series: []}
+    echarts: {series: [{type: bar}]}

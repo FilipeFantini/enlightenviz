@@ -16,4 +16,4 @@ queries:
 charts:
   - title: A
     query: unknown_table
-    echarts: {series: []}
+    echarts: {series: [{type: bar}]}

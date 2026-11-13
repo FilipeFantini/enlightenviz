@@ -39,6 +39,27 @@ function checkMaps(node) {
   }
 }
 
+/**
+ * The page owns the tooltip: ECharts renders a tooltip's `formatter` as HTML,
+ * so an option may hold only `show` and `trigger` under any `tooltip`, and no
+ * `toolbox`. `validate` refuses the same; this fails loudly for an option that
+ * reached the page some other way.
+ */
+function checkTooltips(node, path = "option") {
+  if (Array.isArray(node)) return node.forEach((item, i) => checkTooltips(item, `${path}[${i}]`));
+  if (!isObject(node)) return;
+  for (const [key, value] of Object.entries(node)) {
+    if (key === "encode") continue; // its keys are roles (`tooltip` is one), not options
+    if (key === "toolbox") throw new Error(`${path} has a toolbox, which the page does not draw`);
+    if (key === "tooltip") {
+      const extra = isObject(value) ? Object.keys(value).filter((k) => k !== "show" && k !== "trigger") : ["(not an object)"];
+      if (extra.length > 0) throw new Error(`${path}.tooltip has ${extra.join(", ")}: the page owns the tooltip`);
+    } else {
+      checkTooltips(value, `${path}.${key}`);
+    }
+  }
+}
+
 function axisDefaults(axis, theme) {
   const value = axis.type === "value" || axis.type === "log";
   return merge(
@@ -139,6 +160,7 @@ function withHitAreas(series) {
 /** The author's option with the house theme and the rows. */
 function houseOption(authored, theme, palette, rows, motion) {
   checkMaps(authored);
+  checkTooltips(authored);
   // ECharts changes the objects it is given; the author's option must stay as written.
   const spec = structuredClone(authored);
   const horizontal = asList(spec.yAxis)[0]?.type === "category";

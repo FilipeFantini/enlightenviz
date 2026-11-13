@@ -180,16 +180,40 @@ about 300 ms, unless the visitor asks for reduced motion.
 | `echarts` | map | yes | An [Apache ECharts](https://echarts.apache.org/) option. |
 | `palette` | `categorical` or `ordered` | no | Where the series take their colours from. See below. |
 
-The option is kept as written, and **never carries data or a URL**: the page adds
-the rows of the chart's query itself, as the option's dataset. `validate`
-refuses, anywhere in an option, the keys `data`, `datasets`, `dataset`, `url` and
-`href`, and any string that starts `http://`, `https://`, `//` or `image://` (a
-symbol or a link that would make the browser request something). The one static
-dataset is the world outline (Natural Earth 110m, without Antarctica), which the
-page provides under the reserved name `world`: a `geo` or a series may say
-`map: world`. The page draws it with longitude and latitude at one scale
-(equirectangular), and sizes the card of a chart that draws it to the outline's
-proportions.
+The option is kept as written, and **what it may contain is short**:
+
+- **Series are `bar`, `line` or `scatter`, and at least one.** These are the
+  kinds the house theme styles and the tests draw (the example draws a bar and a
+  scatter; the line is styled but untested). Any other `type` is an error that
+  names the three. The reason is practical: ECharts has more chart kinds than
+  anyone can check here, and the data-carrying ones read their own keys. `graph`
+  and `sankey` read `nodes` and `links`, `radar` reads `indicator`; none of
+  these has a column of the chart's query to belong to, so there is nothing for
+  the page to fill in. Series are only read at the top level of the option, so
+  `baseOption`, `media` and `timeline`, which hide a second list of them, are
+  refused there.
+- **A `tooltip` object holds only `show` and `trigger`**, wherever it appears
+  (the option's, a series', an axis'). ECharts renders a tooltip's `formatter`
+  string as HTML, so a formatter written by a board could make markup out of the
+  rows. The page keeps one `formatter` of its own at the top, which builds the
+  tooltip as DOM nodes (a `div` per line with a `strong` and a `span`, filled
+  with `textContent`), so markup in the data is shown as text.
+  There is no `toolbox`.
+- **No data and no link.** `data`, `datasets`, `dataset`, `url` and `href` carry
+  data; `link`, `sublink`, `target` and `image` make a link or load a picture.
+  All are refused anywhere in the option. The page adds the rows of the chart's
+  query itself, as the option's dataset. The one static dataset is the world
+  outline (Natural Earth 110m, without Antarctica), which the page provides under
+  the reserved name `world`: a `geo` or a series may say `map: world`. The page
+  draws it with longitude and latitude at one scale (equirectangular), and sizes
+  the card of a chart that draws it to the outline's proportions.
+
+A string that starts `http://`, `https://`, `//` or `image://` is also refused,
+as an early and helpful error for a symbol or a link that would make the browser
+request something. **It is not a URL filter**: a URL can be written in ways a
+prefix does not see. What stops a load is the page's content security policy
+(`img-src 'self' data:`, `connect-src 'self'`), and what stops a navigation is
+that the keys that make one are refused.
 
 The page sizes the chart to its card, so do not write the size of the chart. It
 also sets the house theme (colours, fonts, gridlines, bar thickness and corners,
@@ -210,16 +234,34 @@ removes a category does not repaint the others.
 
 ### What `validate` checks in an option
 
-With a database (it needs the query's columns; without one the check is skipped,
-and `validate` says so), `validate` reads the places where an option names a
-column of the rows: every value in `encode` (a name or a list of names; a number
-is a position and is skipped), every name in `dimensions` (a string, or an
-object's `name`), and `dimension` inside `visualMap`; each must be a column the
-query returns. What it **cannot see**: a column written in a tooltip's
-`formatter` template (`{@name}`), `series.name` and other text, a column reached
-by position, anything the page adds, and whether an option key exists at all:
-ECharts has no published schema to check an option against. A misspelt key draws
-nothing or the wrong thing, and `validate` stays silent.
+Without a database `validate` reads the option alone: the rules above (series
+types, tooltip keys, `toolbox`, refused keys and link prefixes). With a database
+it also reads the places where an option names a column of the rows: every value
+in `encode` (a name or a list of names; a number is a position and is skipped),
+every name in `dimensions` (a string, or an object's `name`), and `dimension`
+inside `visualMap`; each must be a column the query returns.
+
+### What `validate` does not check
+
+Said plainly, because a green `validate` is not a clean bill of health:
+
+- **That a key of an option exists.** ECharts has no published schema to check
+  an option against. A misspelt key draws nothing or the wrong thing, and
+  `validate` stays silent.
+- **That an option is safe.** A board is trusted code, written by the operator
+  and reviewed like any other change. The rules above close the paths the page
+  would otherwise open to markup, data and links; they are a rule of the format,
+  not a defence against a hostile author, and the list is not exhaustive. Text
+  that ECharts draws on the canvas (titles, labels, legends, series names) is
+  not HTML and is not restricted.
+- **A column written in text:** a tooltip template's `{@name}` (the tooltip is
+  the page's, so a template is refused anyway), `series.name` and other text, a
+  column reached by position, and anything the page adds.
+- **That a chart looks right.** Whether the encoded columns make a readable
+  chart, or a `line` or a `visualMap` is configured well, is for the eye; the
+  example's screenshots are in `docs/visuals/`.
+- **Without a database,** that the SQL prepares and that the columns exist.
+  `validate` says that it skipped them.
 
 ## The page
 
@@ -249,7 +291,8 @@ where `hash` is computed from all of them at start, and are cached for a year
 A query that fails shows its message and its id in that chart's card; a query
 with no rows says so. The page is light or dark with the system, and a
 button wins either way. Text from data is put in the page as text, never as
-markup. In the table view of a chart the first 500 rows are listed.
+markup. In the table view of a chart the first 500 rows are
+listed.
 
 ## Running a query
 
@@ -327,7 +370,8 @@ reported at the `sql` key, with the line within the query in the message.
 | `board-duplicate` | Two files use the same board id. |
 | `board-no-charts` | `charts` is empty. |
 | `chart-unknown-query` | A chart reads a query the board does not declare. |
-| `chart-spec-forbidden` | An option carries data or a link: `data`, `datasets`, `dataset`, `url`, `href`, or a string that starts `http://`, `https://`, `//`, `image://`. |
+| `chart-spec-forbidden` | An option carries what it may not: `data`, `datasets`, `dataset`, `url`, `href`, `link`, `sublink`, `target`, `image`, a `toolbox`, a `tooltip` key other than `show` and `trigger`, `baseOption`, `media` or `timeline` at the top, or a string that starts `http://`, `https://`, `//`, `image://`. |
+| `chart-series-type` | An option has no series, or a series whose `type` is not `bar`, `line` or `scatter`. |
 | `filter-unknown-param` | A filter drives a parameter no query declares. |
 | `filter-duplicate` | Two filters drive one parameter. |
 | `filter-param-conflict` | The queries a filter drives declare its parameter with different types, defaults or `max_items`. |

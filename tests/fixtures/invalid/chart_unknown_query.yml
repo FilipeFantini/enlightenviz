@@ -6,7 +6,7 @@ queries:
 charts:
   - title: A
     query: a
-    echarts: {series: []}
+    echarts: {series: [{type: bar}]}
   - title: B
     query: b
-    echarts: {series: []}
+    echarts: {series: [{type: bar}]}

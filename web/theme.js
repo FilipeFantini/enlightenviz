@@ -1,7 +1,7 @@
 // The house theme as the page's scripts see it. The colours are written once,
 // as CSS custom properties in page.css (with light-dark(), so that one
 // declaration holds both schemes); this file reads them back, resolved for the
-// scheme in force, so that the chart libraries are themed from the same source.
+// scheme in force, so that the chart is themed from the same source.
 
 const KEY = "enlightenviz-theme";
 const dark = matchMedia("(prefers-color-scheme: dark)");

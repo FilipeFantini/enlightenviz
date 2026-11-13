@@ -125,8 +125,10 @@ Each of these is a decision to take later, not an oversight.
 - **No line or area chart is drawn by the example,** so their house styles are
   set but untested. The sparkline of a stat's `trend` is the one line drawn.
 - **The option is the author's.** A board is trusted code: what `validate`
-  refuses in an option (data, URLs) is a rule of the format, not a defence
-  against a hostile author.
+  refuses in an option (data, links, a tooltip beyond `show` and `trigger`, a
+  `toolbox`, series other than bar, line and scatter) is a rule of the format,
+  not a defence against a hostile author. The list of what `validate` does
+  not check is in [`docs/boards.md`](docs/boards.md).
 - **Rate limits, and slow clients, belong to the proxy in front.** The server
   bounds its database use (pool, timeouts, row limit) but accepts any number of
   client connections and has no header or body timeouts.
@@ -193,8 +195,7 @@ puts them and a throwaway Postgres on a Docker network with `--internal` (no
 route to the internet), and checks that each example board loads, every chart
 draws, the console has no error and no CSP violation, no request leaves for
 another host, and a filter, the table view, the colour toggle, the keyboard, the
-empty state and the error state work. It is also the design's closed-network
-test. `tests/browser/run.sh capture <dir>` takes the screenshots and the
+empty state and the error state work. It is also the design's closed-network test. `tests/browser/run.sh capture <dir>` takes the screenshots and the
 transition frames of [`docs/review/chart-library/`](docs/review/chart-library/README.md).
 The scripts speak the Chrome DevTools Protocol directly, so there is no npm
 package and no `package.json`; the browser is not installed on the host.

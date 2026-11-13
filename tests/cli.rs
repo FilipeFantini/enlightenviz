@@ -52,7 +52,7 @@ fn validate_fails_with_exit_1_and_structured_json() {
     assert_eq!(report["ok"], false);
     assert_eq!(report["database_checked"], false);
     let diagnostics = report["diagnostics"].as_array().unwrap();
-    assert_eq!(diagnostics.len(), 50);
+    assert_eq!(diagnostics.len(), 62);
     for d in diagnostics {
         for key in ["file", "line", "rule", "message", "fix"] {
             assert!(d.get(key).is_some(), "{d} has no {key}");

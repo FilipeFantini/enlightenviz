@@ -30,14 +30,26 @@ fn found(dir: &str) -> Vec<(String, Option<usize>, &'static str)> {
 fn every_mistake_is_reported_with_its_file_line_and_rule() {
     let expected: Vec<(&str, Option<usize>, &str)> = vec![
         ("chart_no_spec.yml", Some(7), "schema"),
+        ("chart_series.yml", Some(9), "chart-series-type"),
+        ("chart_series.yml", Some(12), "chart-series-type"),
+        ("chart_series.yml", Some(17), "chart-series-type"),
+        ("chart_series.yml", Some(18), "chart-series-type"),
         ("chart_spec.yml", Some(10), "chart-spec-forbidden"),
         ("chart_spec.yml", Some(12), "chart-spec-forbidden"),
+        ("chart_spec.yml", Some(16), "chart-spec-forbidden"),
+        ("chart_spec.yml", Some(16), "chart-spec-forbidden"),
         ("chart_spec.yml", Some(16), "chart-spec-forbidden"),
         ("chart_spec.yml", Some(18), "chart-spec-forbidden"),
         ("chart_spec.yml", Some(19), "chart-spec-forbidden"),
         ("chart_spec.yml", Some(24), "chart-spec-forbidden"),
         ("chart_spec.yml", Some(24), "chart-spec-forbidden"),
+        ("chart_spec.yml", Some(24), "chart-spec-forbidden"),
         ("chart_spec.yml", Some(30), "chart-spec-forbidden"),
+        ("chart_spec.yml", Some(34), "chart-spec-forbidden"),
+        ("chart_spec.yml", Some(37), "chart-spec-forbidden"),
+        ("chart_spec.yml", Some(38), "chart-spec-forbidden"),
+        ("chart_spec.yml", Some(42), "chart-spec-forbidden"),
+        ("chart_spec.yml", Some(43), "chart-spec-forbidden"),
         ("chart_unknown_query.yml", Some(11), "chart-unknown-query"),
         ("duplicate_b.yml", Some(2), "board-duplicate"),
         ("filters.yml", Some(4), "filter-unknown-param"),
@@ -137,7 +149,14 @@ fn the_new_messages_name_the_cause() {
             .clone()
     };
     assert!(message("chart_spec.yml", "chart-spec-forbidden", 12).contains("the key `data`"));
-    assert!(message("chart_spec.yml", "chart-spec-forbidden", 16).contains("a link"));
+    assert!(message("chart_spec.yml", "chart-spec-forbidden", 18).contains("starts like a link"));
+    assert!(
+        message("chart_spec.yml", "chart-spec-forbidden", 34)
+            .contains("the tooltip key `formatter`")
+    );
+    assert!(message("chart_spec.yml", "chart-spec-forbidden", 42).contains("`toolbox`"));
+    assert!(message("chart_series.yml", "chart-series-type", 17).contains("`graph`"));
+    assert!(message("chart_series.yml", "chart-series-type", 12).contains("no series"));
     assert!(
         message("filters.yml", "filter-param-conflict", 39)
             .contains("`date` in `a` and `text` in `b`")
@@ -185,7 +204,7 @@ fn a_huge_number_of_sql_errors_is_reported_quickly_capped_and_said_so() {
     std::fs::create_dir_all(&dir).unwrap();
     let sql = format!("select {}", "$a ".repeat(300_000));
     let board = format!(
-        "board: many\ntitle: Many errors\nqueries:\n  q:\n    sql: |\n      {sql}\ncharts:\n  - title: C\n    query: q\n    echarts: {{series: []}}\n"
+        "board: many\ntitle: Many errors\nqueries:\n  q:\n    sql: |\n      {sql}\ncharts:\n  - title: C\n    query: q\n    echarts: {{series: [{{type: bar}}]}}\n"
     );
     std::fs::write(dir.join("many.yml"), board).unwrap();
 

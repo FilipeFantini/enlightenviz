@@ -1,0 +1,19 @@
+board: chart-series
+title: Series
+queries:
+  a:
+    sql: select 1 as n
+charts:
+  - title: No series
+    query: a
+    echarts: {xAxis: {type: category}}
+  - title: An empty list
+    query: a
+    echarts: {series: []}
+  - title: A kind the page does not draw
+    query: a
+    echarts:
+      series:
+        - {type: graph, nodes: [], links: []}
+        - {name: no type}
+        - {type: bar}

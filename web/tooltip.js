@@ -1,6 +1,5 @@
-// The tooltip's content, shared by both chart libraries: one line per entry,
-// the value first and its label second. Text from data goes in with
-// textContent, never as markup.
+// The tooltip's content: one line per entry, the value first and its label
+// second. Text from data goes in with textContent, never as markup.
 
 /**
  * @param {{value: string, label: string|null}[]} entries
