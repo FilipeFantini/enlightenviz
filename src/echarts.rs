@@ -1,9 +1,9 @@
 //! What `validate` can know about an ECharts option without running it: which
 //! data columns it names.
 //!
-//! An ECharts option is not checked by a published schema the way a Vega-Lite
-//! one is, so this reads only the places where the option names a column of
-//! the rows the page injects (`dataset.source`, an array of row objects):
+//! An ECharts option has no published schema to check it against, so this reads
+//! only the places where the option names a column of the rows the page injects
+//! (`dataset.source`, an array of row objects):
 //!
 //! - `encode`: each value is a column name or a list of them (`x`, `y`,
 //!   `tooltip`, `itemName`, `lng`, `lat`, ...). A number is a position, not a
