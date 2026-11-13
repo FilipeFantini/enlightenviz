@@ -57,7 +57,7 @@ survey; section 11 says what reverses the decision.
 The first version does exactly this, and is judged on it (section 10).
 
 - **Boards as files.** One YAML file per board: named queries, their typed
-  parameters, charts as Vega-Lite specifications bound to a query, filters
+  parameters, charts as ECharts options bound to a query, filters
   bound to parameters, text.
 - **One data source: Postgres**, through a read-only role.
 - **A server** with four kinds of route: a board's page, a query's result as
