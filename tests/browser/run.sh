@@ -9,8 +9,9 @@
 #                                            frames of docs/visuals
 #
 # Everything it creates is named enlightenviz-closed-* or enlightenviz-*:test,
-# and the containers, the network and the scratch directory are removed on
-# exit. The two images stay, to be reused; remove them with
+# and the containers (with the anonymous volume Postgres makes), the network
+# and the scratch directory are removed on exit. The two images stay, to be
+# reused; remove them with
 #   docker rmi enlightenviz-image:browser-test enlightenviz-browser:test
 set -eu
 
@@ -24,7 +25,7 @@ POSTGRES=postgres:18.7-alpine3.24@sha256:75dcac3dfb1cd01ca3536910bbc84128759362f
 SCRATCH="$(mktemp -d)"
 
 cleanup() {
-  docker rm -f "$SERVER" "$PG" >/dev/null 2>&1 || true
+  docker rm -fv "$SERVER" "$PG" >/dev/null 2>&1 || true
   docker network rm "$NET" >/dev/null 2>&1 || true
   rm -rf "$SCRATCH"
 }
