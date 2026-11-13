@@ -197,7 +197,8 @@ The option is kept as written, and **what it may contain is short**:
   string as HTML, so a formatter written by a board could make markup out of the
   rows. The page keeps one `formatter` of its own at the top, which builds the
   tooltip as DOM nodes (a `div` per line with a `strong` and a `span`, filled
-  with `textContent`), so markup in the data is shown as text.
+  with `textContent`), so markup in the data is shown as text; the browser test
+  hovers the bars and asserts the tooltip holds nothing the page did not create.
   There is no `toolbox`.
 - **No data and no link.** `data`, `datasets`, `dataset`, `url` and `href` carry
   data; `link`, `sublink`, `target` and `image` make a link or load a picture.
@@ -291,8 +292,18 @@ where `hash` is computed from all of them at start, and are cached for a year
 A query that fails shows its message and its id in that chart's card; a query
 with no rows says so. The page is light or dark with the system, and a
 button wins either way. Text from data is put in the page as text, never as
-markup. In the table view of a chart the first 500 rows are
+markup: in the tiles, the table view, the filters' options and the tooltip,
+which is built as DOM nodes. The browser test loads a board whose data is markup
+(`tests/browser/hostile/`) and asserts that no element comes from it and that the
+text is shown literally. In the table view of a chart the first 500 rows are
 listed.
+
+Two things a filter says at its control, in small text, rather than leaving the
+control looking right while the charts do something else. When the value in use
+(a default, say) is not among the options an `options_from` query returned, the
+control names it. When an options query returns a row whose value is `NULL`, the
+option is not offered, because the browser would send it as the text "null", and
+the control says how many options have no value and are not shown.
 
 ## Running a query
 

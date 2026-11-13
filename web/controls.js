@@ -56,6 +56,32 @@ export function writeUrl(filters, values) {
   history.replaceState(null, "", text === "" ? location.pathname : `${location.pathname}?${text}`);
 }
 
+/** A line of small text under a control. Text only, never markup. */
+function note() {
+  const line = document.createElement("p");
+  line.className = "filter-note";
+  line.hidden = true;
+  return line;
+}
+
+/**
+ * Says so, at the control, when the value in use is not among the options: a
+ * default, say, that the options query did not return. Without it the control
+ * would be blank while the charts used the value.
+ */
+function missingNote(line, options, current) {
+  const known = options.map((o) => o.value);
+  const missing = [].concat(current).filter((v) => !known.includes(v));
+  line.hidden = missing.length === 0;
+  line.textContent = missing.length === 0 ? "" : `In use, but not among the options: ${missing.join(", ")}.`;
+}
+
+/** Says that some options had no value and are not offered. */
+function skippedNote(line, skipped) {
+  line.hidden = !skipped;
+  line.textContent = skipped ? `${skipped} option${skipped === 1 ? " has" : "s have"} no value and ${skipped === 1 ? "is" : "are"} not shown.` : "";
+}
+
 function field(filter, control) {
   const wrapper = document.createElement("div");
   wrapper.className = "filter";
@@ -66,7 +92,7 @@ function field(filter, control) {
   return { wrapper, label };
 }
 
-function select(filter, options, values, change) {
+function select(filter, options, values, change, skipped) {
   const control = document.createElement("select");
   for (const option of options) {
     const item = document.createElement("option");
@@ -75,8 +101,16 @@ function select(filter, options, values, change) {
     control.append(item);
   }
   control.value = values[filter.param];
-  control.addEventListener("change", () => change(control.value));
+  const missing = note();
+  const gone = note();
+  skippedNote(gone, skipped);
+  missingNote(missing, options, values[filter.param]);
+  control.addEventListener("change", () => {
+    change(control.value);
+    missingNote(missing, options, values[filter.param]);
+  });
   const { wrapper, label } = field(filter, control);
+  wrapper.append(missing, gone);
   label.htmlFor = control.id = `filter-${filter.param}`;
   return wrapper;
 }
@@ -96,7 +130,7 @@ function date(filter, values, change) {
   return wrapper;
 }
 
-function multiselect(filter, options, values, change) {
+function multiselect(filter, options, values, change, skipped) {
   const details = document.createElement("details");
   details.className = "multi";
   const summary = document.createElement("summary");
@@ -127,10 +161,15 @@ function multiselect(filter, options, values, change) {
     // the parameter's default: so the last choice cannot be removed.
     for (const box of boxes) box.disabled = chosen.length === 1 && box.checked;
   };
+  const missing = note();
+  const gone = note();
+  skippedNote(gone, skipped);
+  missingNote(missing, options, values[filter.param]);
   for (const box of boxes) {
     box.addEventListener("change", () => {
       change(boxes.filter((b) => b.checked).map((b) => b.value));
       describe();
+      missingNote(missing, options, values[filter.param]);
     });
   }
   details.addEventListener("keydown", (event) => {
@@ -145,6 +184,7 @@ function multiselect(filter, options, values, change) {
   describe();
   details.append(summary, menu);
   const { wrapper, label } = field(filter, details);
+  wrapper.append(missing, gone);
   // A label cannot name a <details>; name the summary instead.
   label.removeAttribute("for");
   label.id = `filter-${filter.param}-label`;
@@ -153,10 +193,11 @@ function multiselect(filter, options, values, change) {
 }
 
 /**
- * Fills `container` with the controls. `change(param, value)` is called with
- * the new value of a filter after the visitor changes it.
+ * Fills `container` with the controls. `skipped` counts, by param, the options
+ * that had no value (a NULL) and are not offered. `change(param, value)` is
+ * called with the new value of a filter after the visitor changes it.
  */
-export function buildControls(container, filters, options, values, change) {
+export function buildControls(container, filters, options, skipped, values, change) {
   for (const filter of filters) {
     const list = options[filter.param];
     const set = (value) => {
@@ -177,9 +218,9 @@ export function buildControls(container, filters, options, values, change) {
       missing.append(label, note);
       container.append(missing);
     } else if (filter.control === "select") {
-      container.append(select(filter, list, values, set));
+      container.append(select(filter, list, values, set, skipped[filter.param] ?? 0));
     } else {
-      container.append(multiselect(filter, list, values, set));
+      container.append(multiselect(filter, list, values, set, skipped[filter.param] ?? 0));
     }
   }
 }

@@ -60,9 +60,14 @@ function themeButton() {
   return button;
 }
 
-/** Each filter's options as `{value, label}` with text values; null if they could not be loaded. */
+/**
+ * Each filter's options as `{value, label}` with text values (null if they
+ * could not be loaded), and how many rows of an options query had no value.
+ * A NULL is never offered: sent as a parameter it would be the text "null".
+ */
 async function loadOptions(definition) {
   const options = {};
+  const skipped = {};
   await Promise.all(
     definition.filters.map(async (filter) => {
       if (filter.options) {
@@ -71,7 +76,9 @@ async function loadOptions(definition) {
         const { query, value, label } = filter.options_from;
         try {
           const { rows } = await getJson(`/api/boards/${definition.id}/queries/${query}`);
-          options[filter.param] = rows.map((row) => ({ value: String(row[value]), label: String(row[label]) }));
+          const offered = rows.filter((row) => row[value] !== null);
+          skipped[filter.param] = rows.length - offered.length;
+          options[filter.param] = offered.map((row) => ({ value: String(row[value]), label: String(row[label] ?? row[value]) }));
         } catch (error) {
           console.error(`The options of ${filter.label} could not be loaded: ${error.message}`);
           options[filter.param] = null;
@@ -79,14 +86,14 @@ async function loadOptions(definition) {
       }
     }),
   );
-  return options;
+  return { options, skipped };
 }
 
 async function main() {
   const id = decodeURIComponent(location.pathname.split("/").filter(Boolean).pop() ?? "");
   const definition = await getJson(`/api/boards/${encodeURIComponent(id)}`);
 
-  const options = await loadOptions(definition);
+  const { options, skipped } = await loadOptions(definition);
   const { values, notices } = stateFromUrl(definition.filters, location.search, options);
 
   const top = element("header", "top");
@@ -140,7 +147,7 @@ async function main() {
     cards.set(chart.query, [...(cards.get(chart.query) ?? []), card]);
   }
 
-  buildControls(filterRow, definition.filters, options, values, (param) => {
+  buildControls(filterRow, definition.filters, options, skipped, values, (param) => {
     writeUrl(definition.filters, values);
     notice.replaceChildren();
     refresh([...cards.keys()].filter((name) => param in definition.queries[name].params));

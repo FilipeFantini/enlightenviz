@@ -4,8 +4,9 @@
 // board: the page loads, every chart draws (a canvas with pixels in it), the
 // console has no error and no CSP violation, no request goes to another host,
 // a filter changes the numbers, the empty and error states are explicit, the
-// table view lists the rows and the colour toggle works. Prints one JSON
-// object of measurements at the end; exits 1 on the first failed check.
+// table view lists the rows and the colour toggle works. The "hostile" board
+// is checked differently: its data is markup, and must be shown as text.
+// Prints one JSON object of measurements at the end; exits 1 if a check failed.
 
 import { ALL_SETTLED, startBrowser } from "./cdp.mjs";
 
@@ -146,11 +147,107 @@ async function smoke(browser, board) {
   return { board, firstChart: Math.round(firstChart), requests: page.requests.length };
 }
 
+// The rows of the hostile board hold markup that would draw a picture, make
+// text bold or run a script if the page treated it as HTML. It must appear
+// as text everywhere, and the tooltip must hold only what the page built.
+const elementsOfMarkup = `document.querySelectorAll("img, b, i, u, iframe, object, embed, script:not([src]), [onerror]").length`;
+const hostileText = (text) => (value) => value.includes(text);
+
+async function hostile(browser, board) {
+  const page = await browser.newPage({ width: 1440, height: 900, scheme: "light" });
+  const url = `${base}/boards/${board}`;
+  await page.goto(url);
+  await page.waitFor(ALL_SETTLED, "every card to settle");
+  await new Promise((resolve) => setTimeout(resolve, 800));
+  const noMarkup = async (where) => {
+    const found = await page.evaluate(elementsOfMarkup);
+    const ran = await page.evaluate(`window.pwned`);
+    check(board, found === 0 && ran === undefined, `${where}: no element came from the data, and nothing ran (${found} found, pwned=${ran})`);
+  };
+  const states = await page.evaluate(`[...document.querySelectorAll(".card.chart, .card.stat")].map((c) => c.dataset.state + (c.dataset.state === "ready" ? "" : ":" + c.querySelector(".state, .error-message")?.textContent))`);
+  check(board, states.length === 4 && states.every((s) => s === "ready"), `2 stats and 2 charts are ready (${states.join(",")})`);
+  await noMarkup("after load");
+
+  // Text a board author wrote and text the data holds are both shown literally.
+  const titles = await page.evaluate(`[...document.querySelectorAll(".card .chart-title, .card .stat-label")].map((n) => n.textContent)`);
+  check(board, titles.includes("<b>In place</b>") && titles.some(hostileText("<b>Total</b> by place")), `a title and a tile label with markup are shown as text (${titles.join(" | ")})`);
+
+  // Filter options: each hostile label is an option, as text. The NULL one is
+  // not offered, and the control says so.
+  const place = await page.evaluate(`[...document.querySelectorAll("select option")].map((o) => o.value + "=>" + o.textContent)`);
+  check(board, place.length === 3 && place.every((o) => !/^null=>|=>null$/.test(o)) && place.some(hostileText('<img src=x onerror="window.pwned = 1">')), `the select offers the 3 options with a value, as text, and no "null" (${place.join(" | ")})`);
+  const boxes = await page.evaluate(`[...document.querySelectorAll(".multi input")].map((b) => b.value)`);
+  check(board, boxes.length === 2 && !boxes.includes("null"), `the multi-select offers the 2 options with a value (${boxes.join(" | ")})`);
+  const notes = await page.evaluate(`[...document.querySelectorAll(".filter-note")].filter((n) => !n.hidden && getComputedStyle(n).display !== "none").map((n) => n.textContent)`);
+  const noValue = notes.filter((n) => /no value and is not shown/.test(n));
+  check(board, noValue.length === 2, `both controls say that an option has no value and is not shown (${notes.join(" | ")})`);
+  // The default place is not among the options: the control says which value is in use.
+  check(board, notes.some((n) => n.includes("<i>no such place</i>") && /not among the options/.test(n)), "a value in use that is not among the options is named at its control");
+
+  // A tooltip holds only what the page built: divs, strongs and spans, with the
+  // text literally. Arrow keys walk the bars; the third one is the script row.
+  const tips = [];
+  // Each chart has a tooltip element of its own; the one showing is visible.
+  const tipOf = () => `(() => {
+    const showing = (n) => { const s = getComputedStyle(n.parentElement); return s.display !== "none" && s.visibility !== "hidden" && Number(s.opacity) > 0; };
+    const lines = [...document.querySelectorAll(".tip-lines")].filter(showing).pop();
+    if (!lines) return null;
+    const tags = [...lines.parentElement.querySelectorAll("*")].map((n) => n.tagName);
+    return { text: lines.textContent, tags: [...new Set(tags)] };
+  })()`;
+  await page.evaluate(`document.querySelectorAll(".card.chart .host")[0].focus()`);
+  for (let i = 0; i < 3; i++) {
+    await page.send("Input.dispatchKeyEvent", { type: "keyDown", key: "ArrowRight", code: "ArrowRight", windowsVirtualKeyCode: 39 });
+    await page.send("Input.dispatchKeyEvent", { type: "keyUp", key: "ArrowRight", code: "ArrowRight", windowsVirtualKeyCode: 39 });
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    tips.push(await page.evaluate(tipOf()));
+  }
+  await page.evaluate(`document.querySelectorAll(".card.chart .host")[1].focus()`);
+  await page.send("Input.dispatchKeyEvent", { type: "keyDown", key: "ArrowRight", code: "ArrowRight", windowsVirtualKeyCode: 39 });
+  await page.send("Input.dispatchKeyEvent", { type: "keyUp", key: "ArrowRight", code: "ArrowRight", windowsVirtualKeyCode: 39 });
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  tips.push(await page.evaluate(tipOf()));
+  const shown = tips.map((t) => t?.text ?? "(no tooltip)");
+  check(board, tips.every((t) => t !== null), `each arrow key showed a tooltip (${shown.join(" | ")})`);
+  const tags = new Set(tips.flatMap((t) => t?.tags ?? []));
+  check(board, [...tags].every((t) => ["DIV", "STRONG", "SPAN"].includes(t)), `a tooltip holds only elements the page created (${[...tags].join(",")})`);
+  check(board, shown.some(hostileText("<b>bold</b> &amp; an entity")) && shown.some(hostileText('<img src=x onerror="window.pwned = 1">')) && shown.some(hostileText("<script>window.pwned = 1</script>")), "the hostile place names are in the tooltips as text");
+  check(board, shown[3].includes("<img src=x onerror=1>") && shown[3].includes("<u>Double</u>"), `an axis tooltip shows the series names as text (${shown[3]})`);
+  await noMarkup("with a tooltip open");
+
+  // The table view lists the same text.
+  await page.evaluate(`document.querySelectorAll(".chart .toggle").forEach((t) => t.click())`);
+  const cells = await page.evaluate(`[...document.querySelectorAll(".chart .table-wrap:not([hidden]) td, .chart .table-wrap:not([hidden]) th")].map((c) => c.textContent)`);
+  check(board, cells.some(hostileText('<img src=x onerror="window.pwned = 1">')) && cells.some(hostileText("<script>window.pwned = 1</script>")), `the table view shows the hostile text as text (${cells.length} cells)`);
+  await noMarkup("in the table view");
+  await page.evaluate(`document.querySelectorAll(".chart .toggle").forEach((t) => t.click())`);
+
+  // Choosing a hostile option sends it as a value, and the tile follows.
+  await page.evaluate(`(() => { const s = document.querySelector("select"); s.value = [...s.options].find((o) => o.value.startsWith("<script>")).value; s.dispatchEvent(new Event("change")); })()`);
+  await page.waitFor(`document.querySelector(".stat .stat-value").textContent !== "0"`, "the tile to change");
+  await page.waitFor(ALL_SETTLED, "cards to settle after the filter");
+  const chosen = await page.evaluate(`document.querySelector(".stat .stat-value").textContent`);
+  const query = await page.evaluate(`new URLSearchParams(location.search).get("place")`);
+  check(board, chosen === "3" && query === "<script>window.pwned = 1</script>", `a hostile option is sent as a value and the tile follows (${chosen}, ${query})`);
+  const left = await page.evaluate(`[...document.querySelectorAll(".filter-note")].filter((n) => !n.hidden).map((n) => n.textContent).join(" | ")`);
+  check(board, !left.includes("not among the options"), `the note about a value in use goes away once an option is chosen (${left})`);
+  await noMarkup("after choosing an option");
+
+  // No request carried a NULL as the text "null".
+  const sentNull = page.requests.filter((u) => /null/i.test(decodeURIComponent(u)));
+  check(board, sentNull.length === 0, `no request carries "null" (${sentNull.join(", ")})`);
+  const other = page.requests.filter((u) => new URL(u).host !== host && !u.startsWith("data:"));
+  check(board, other.length === 0, `every request went to ${host} (${page.requests.length} requests)`);
+  check(board, page.errors.length === 0, `no console error or CSP violation${page.errors.length ? `: ${page.errors.join(" || ")}` : ""}`);
+  page.close();
+  return { board, requests: page.requests.length };
+}
+
 await closedNetwork();
 const browser = await startBrowser();
 const results = [];
 try {
-  for (const board of boards) results.push(await smoke(browser, board));
+  for (const board of boards) results.push(await (board === "hostile" ? hostile : smoke)(browser, board));
 } finally {
   browser.close();
 }

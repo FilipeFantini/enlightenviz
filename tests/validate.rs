@@ -167,9 +167,10 @@ fn the_new_messages_name_the_cause() {
 }
 
 #[test]
-fn the_example_and_the_api_fixtures_are_valid() {
+fn the_example_the_hostile_board_and_the_api_fixtures_are_valid() {
     for dir in [
         "examples/earthquakes",
+        "tests/browser/hostile",
         "tests/fixtures/api",
         "tests/fixtures/writes",
     ] {
