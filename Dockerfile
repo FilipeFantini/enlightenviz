@@ -7,6 +7,10 @@ FROM rust:1.100.0-alpine3.24@sha256:de1e0058543a81ed7b046629167db587c67a94bdf37c
 WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
+# The page's scripts and styles and the vendored libraries are embedded in the
+# binary (src/assets.rs).
+COPY web ./web
+COPY vendor ./vendor
 # Alpine's Rust target is musl, which links statically by default.
 RUN cargo build --release --locked
 

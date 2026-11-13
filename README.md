@@ -4,8 +4,10 @@ A small server that draws dashboards written as code: SQL and chart
 descriptions in Git, served with filters and live updates from a read-only
 database connection.
 
-**Status: a walking skeleton.** The first slice works end to end for data and
-does not draw anything yet. Read [`docs/design.md`](docs/design.md): what it is
+**Status: a walking skeleton, with a page.** Boards are drawn in the browser with
+Apache ECharts, chosen over Vega-Lite by the operator, by eye
+([the comparison](docs/review/chart-library/README.md)). The baseline images that
+a change to the look is compared against are in [`docs/visuals/`](docs/visuals/). Read [`docs/design.md`](docs/design.md): what it is
 for, what it will not do, its security model, and the criteria by which the
 first version is judged or the project abandoned.
 
@@ -23,8 +25,17 @@ Maintained by one person, with AI agents writing the code.
   its query returns. Every error has the file, the line, a rule id and what to
   change, as text or with `--format json`. A non-zero exit code on any error.
 - **`enlightenviz serve`**: loads and validates every board, prepares every query,
-  and answers `GET /api/boards/{board}/queries/{query}` with the rows as JSON and
-  the column names, and `GET /healthz`. Any problem at start stops the start.
+  and answers `GET /` (the boards), `GET /boards/{board}` (the page),
+  `GET /api/boards/{board}` (its definition), `GET /assets/...`,
+  `GET /api/boards/{board}/queries/{query}` with the rows as JSON and the column
+  names, and `GET /healthz`. Any problem at start stops the start.
+- **The page**: filters above the content, stat tiles, and charts drawn in the
+  browser, with the filters in the URL, animation to new data, tooltips (also by
+  keyboard), a table view, a trend line beside the headline number, numbers that count to their new value, explicit empty and error states, light and dark, from
+  375 to 1440 px. Plain ES modules and CSS, no build step; ECharts is vendored
+  under [`vendor/`](vendor/README.md) and embedded in the binary, and every page
+  carries a strict content security policy. See "The page" in
+  [`docs/boards.md`](docs/boards.md).
 - **Safe by construction.** The browser names a query and gives typed values;
   every value is checked against its declared type, sent as text and cast by the
   rewritten SQL, never concatenated. Each query runs in a `READ ONLY`
@@ -33,13 +44,13 @@ Maintained by one person, with AI agents writing the code.
   connection string or database message reaches a client; the server logs the
   detail under an id that the client also receives.
 
-Not yet: the page that draws charts, filters in the browser, live updates, other
-data sources, dbt, login. A chart is validated and kept, not drawn.
+Not yet: live updates, other data sources, dbt, login.
 
 ## Try it
 
 You need Docker and nothing else. This starts a throwaway Postgres, loads the
-invented data of the example board, builds the image and serves the board.
+invented data of the example board, builds the image and serves the board; open
+`http://127.0.0.1:8080/` for the page.
 
 ```sh
 docker network create enlightenviz-net
@@ -48,7 +59,7 @@ docker run -d --name enlightenviz-pg --network enlightenviz-net \
 # wait a few seconds for it to start, then:
 docker exec -i enlightenviz-pg psql -U postgres -v ON_ERROR_STOP=1 < examples/earthquakes/schema.sql
 docker exec enlightenviz-pg psql -U postgres -c \
-  "create role enlightenviz_reader login password 'reader-demo'; grant select on earthquakes_daily to enlightenviz_reader"
+  "create role enlightenviz_reader login password 'reader-demo'; grant select on earthquake_events to enlightenviz_reader"
 
 docker build -t enlightenviz-image:dev .
 docker run -d --name enlightenviz-server --network enlightenviz-net -p 127.0.0.1:8080:8080 \
@@ -57,7 +68,7 @@ docker run -d --name enlightenviz-server --network enlightenviz-net -p 127.0.0.1
   -e ENLIGHTENVIZ_ALLOW_UNENCRYPTED_DATABASE=true \
   enlightenviz-image:dev
 
-curl 'http://127.0.0.1:8080/api/boards/earthquakes/queries/by_day?from=2024-01-29&regions=Andes'
+curl 'http://127.0.0.1:8080/api/boards/earthquakes/queries/daily?from=2024-01-20&regions=Andes'
 curl http://127.0.0.1:8080/healthz
 ```
 
@@ -104,7 +115,21 @@ Each of these is a decision to take later, not an oversight.
   `--allow-unencrypted-database` says that is meant. Use it only on a network you
   trust (a container network, a loopback). The design's default, TLS with the
   server's name verified, is still to come.
-- **No page, no browser filters, no live updates.** See [the design](docs/design.md).
+- **No live updates.** The page asks for its data when it loads and when a filter
+  changes. See [the design](docs/design.md).
+- **No selection in one chart that filters another.** The design lists it; a
+  filter is the only way to narrow a view.
+- **No gzip.** The server sends the assets as they are (about 1.2 MB of script,
+  about a third of that compressed). Compression belongs to the proxy in front,
+  like rate limits.
+- **No line or area chart is drawn by the example,** so their house styles are
+  set but untested. The sparkline of a stat's `trend` is the one line drawn.
+- **The option is the author's.** A board is trusted code: what `validate`
+  refuses in an option (data, links, a tooltip beyond `show` and `trigger`, a
+  `toolbox`, series other than bar, line and scatter) is a rule of the format,
+  not a defence against a hostile author. Text from data is shown as text, and
+  the browser test checks it with hostile rows; the list of what `validate` does
+  not check is in [`docs/boards.md`](docs/boards.md).
 - **Rate limits, and slow clients, belong to the proxy in front.** The server
   bounds its database use (pool, timeouts, row limit) but accepts any number of
   client connections and has no header or body timeouts.
@@ -131,8 +156,12 @@ Each of these is a decision to take later, not an oversight.
 On one Mac (aarch64) under Docker, with the example board and a pool of 4,
 resident memory of the server was 2.3 MiB right after start and 2.7 MiB after 1,000
 sequential and 200 concurrent requests, with a peak of 6.8 MiB during the
-concurrent burst; the image is 3.9 MB. Design section 10 sets a ceiling of 64 MiB.
-This is a measurement, not a CI gate yet.
+concurrent burst; the image was 3.9 MB. With the page and ECharts embedded it
+was 3.6 MiB after start and 3.8 MiB after 1,000 page loads of five requests each (a page,
+`echarts.min.js`, `app.js`, a definition and a query), also its peak, and the
+image was 5.9 MB; the script of a page is 1.17 MB (0.38 MB gzipped), of which
+47 KB is the page's own. Design section 10 sets a ceiling of 64 MiB. This is a
+measurement, not a CI gate yet.
 
 ## Development
 
@@ -161,10 +190,27 @@ fail; they are not skipped. After a change to the format, regenerate the schema
 (`enlightenviz schema > schema/board.schema.json`): a test fails while the
 committed file differs from the generated one.
 
+The page is tested in a real browser: `tests/browser/run.sh smoke` builds the
+server image and a headless Chromium image ([`tests/browser/`](tests/browser/)),
+puts them and a throwaway Postgres on a Docker network with `--internal` (no
+route to the internet), and checks that each example board loads, every chart
+draws, the console has no error and no CSP violation, no request leaves for
+another host, and a filter, the table view, the colour toggle, the keyboard, the
+empty state and the error state work. A second board, whose rows are markup
+(`tests/browser/hostile/`), checks that text from data is shown as text in the
+tiles, options, table view and tooltip, that a tooltip holds only elements the
+page created, and that a filter says so when its value is not among the options
+or an option has no value. It is also the design's closed-network test. `tests/browser/run.sh capture <dir>` takes the screenshots and the
+transition frames of [`docs/review/chart-library/`](docs/review/chart-library/README.md).
+The scripts speak the Chrome DevTools Protocol directly, so there is no npm
+package and no `package.json`; the browser is not installed on the host.
+
 CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs the format
 check, clippy with warnings as errors, the tests against a Postgres service,
 `cargo deny` ([`deny.toml`](deny.toml): advisories, licenses, bans, sources), a
-secret scan (gitleaks) and the image build. Its actions are pinned by commit.
+secret scan (gitleaks), the image build and that browser test. Its actions are
+pinned by commit, and its base images by digest (Chromium comes from Alpine's
+repository for the pinned release).
 
 The dependencies, and why each is there: `axum` (the HTTP server), `tokio` (the
 async runtime, one thread), `tokio-postgres` and `deadpool-postgres` (the
@@ -172,7 +218,9 @@ Postgres client and its bounded pool), `serde`, `serde_json` and
 `serde_path_to_error` (reading a board, and where in it an error is), `schemars`
 (the JSON Schema, from the same types), `saphyr` and `saphyr-parser` (YAML with
 line numbers), `clap` (flags and environment variables), `form_urlencoded` (the
-query string).
+query string). The page added no crate: the content-hashed names use the standard
+library's hasher, and the scripts and styles in [`web/`](web/) and the libraries in
+[`vendor/`](vendor/README.md) are embedded with `include_bytes!`.
 
 ## License
 

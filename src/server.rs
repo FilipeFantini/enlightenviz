@@ -1,4 +1,5 @@
-//! The HTTP side: health, and a query's result as JSON.
+//! The HTTP side: the pages, a board's definition, a query's result as JSON,
+//! the embedded assets, and health.
 //!
 //! The browser names a board and a query and gives typed values; it never
 //! sends SQL. Each value is checked against its declared type before it
@@ -22,10 +23,12 @@ use tokio::net::TcpListener;
 use tokio::signal::unix::{SignalKind, signal};
 use tokio_postgres::types::ToSql;
 
+use crate::assets::Assets;
 use crate::catalog::{CompiledQuery, load_dir};
 use crate::db::{Database, RunError, Settings};
 use crate::diagnostic::Diagnostic;
 use crate::log;
+use crate::page::{self, CONTENT_SECURITY_POLICY, Page};
 use crate::param::Bound;
 
 /// What the handlers share.
@@ -34,6 +37,9 @@ pub struct AppState {
     row_limit: usize,
     /// board id -> query name -> the query.
     queries: BTreeMap<String, BTreeMap<String, CompiledQuery>>,
+    /// board id -> what its page needs.
+    pages: BTreeMap<String, Page>,
+    assets: Assets,
 }
 
 impl AppState {
@@ -47,6 +53,12 @@ impl AppState {
             diagnostics.sort_by(|a, b| (&a.file, a.line).cmp(&(&b.file, b.line)));
             return Err(PrepareError::Invalid(diagnostics));
         }
+        let mut pages = BTreeMap::new();
+        for loaded in &catalog.boards {
+            let page = Page::new(&loaded.board)
+                .map_err(|e| PrepareError::Failed(format!("{}: {e}", loaded.file)))?;
+            pages.insert(loaded.board.board.clone(), page);
+        }
         let queries = catalog
             .boards
             .into_iter()
@@ -56,6 +68,8 @@ impl AppState {
             db,
             row_limit: settings.row_limit,
             queries,
+            pages,
+            assets: Assets::new(),
         })
     }
 
@@ -79,7 +93,11 @@ pub enum PrepareError {
 
 pub fn router(state: Arc<AppState>) -> Router {
     Router::new()
+        .route("/", get(index))
+        .route("/boards/{board}", get(board_page))
+        .route("/assets/{hash}/{name}", get(asset))
         .route("/healthz", get(healthz))
+        .route("/api/boards/{board}", get(definition))
         .route("/api/boards/{board}/queries/{query}", get(query))
         .fallback(not_found)
         .with_state(state)
@@ -102,6 +120,81 @@ pub async fn serve(listener: TcpListener, state: Arc<AppState>) -> std::io::Resu
         .await
 }
 
+/// An HTML answer. The policy is on every page, and `nosniff` stops a browser
+/// from reading it as anything else.
+fn html_response(body: String) -> Response {
+    let mut response = (StatusCode::OK, body).into_response();
+    let headers = response.headers_mut();
+    headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("text/html; charset=utf-8"),
+    );
+    headers.insert(
+        header::CONTENT_SECURITY_POLICY,
+        HeaderValue::from_static(CONTENT_SECURITY_POLICY),
+    );
+    headers.insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
+    headers.insert(
+        header::REFERRER_POLICY,
+        HeaderValue::from_static("no-referrer"),
+    );
+    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
+    response
+}
+
+async fn index(State(state): State<Arc<AppState>>) -> Response {
+    html_response(page::index(&state.pages, &state.assets))
+}
+
+fn no_such_board() -> ApiError {
+    ApiError::new(StatusCode::NOT_FOUND, "not_found", "there is no such board")
+}
+
+async fn board_page(
+    State(state): State<Arc<AppState>>,
+    Path(board): Path<String>,
+) -> Result<Response, ApiError> {
+    let page = state.pages.get(&board).ok_or_else(no_such_board)?;
+    Ok(html_response(page::board(page, &state.assets)))
+}
+
+async fn definition(
+    State(state): State<Arc<AppState>>,
+    Path(board): Path<String>,
+) -> Result<Response, ApiError> {
+    let page = state.pages.get(&board).ok_or_else(no_such_board)?;
+    Ok(json_response(StatusCode::OK, page.definition.clone()))
+}
+
+/// A file of the page. The name carries the hash of the whole set, so the
+/// answer under one URL never changes and may be cached for a year.
+async fn asset(
+    State(state): State<Arc<AppState>>,
+    Path((hash, name)): Path<(String, String)>,
+) -> Result<Response, ApiError> {
+    let asset = state.assets.get(&hash, &name).ok_or_else(|| {
+        ApiError::new(StatusCode::NOT_FOUND, "not_found", "there is no such file")
+    })?;
+    let mut response = (StatusCode::OK, asset.bytes).into_response();
+    let headers = response.headers_mut();
+    headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static(asset.content_type),
+    );
+    headers.insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("public, max-age=31536000, immutable"),
+    );
+    headers.insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
+    Ok(response)
+}
+
 async fn healthz() -> &'static str {
     "ok\n"
 }
@@ -119,9 +212,7 @@ async fn query(
     Path((board, name)): Path<(String, String)>,
     RawQuery(raw): RawQuery,
 ) -> Result<Response, ApiError> {
-    let queries = state.queries.get(&board).ok_or_else(|| {
-        ApiError::new(StatusCode::NOT_FOUND, "not_found", "there is no such board")
-    })?;
+    let queries = state.queries.get(&board).ok_or_else(no_such_board)?;
     let compiled = queries.get(&name).ok_or_else(|| {
         ApiError::new(
             StatusCode::NOT_FOUND,

@@ -1,0 +1,519 @@
+/* The house theme. Every colour is written once, with light-dark(), which
+   picks the first value in a light scheme and the second in a dark one. The
+   scheme follows the system, unless the visitor's choice (data-theme on the
+   root element) says otherwise. The page's scripts read these properties to
+   theme the chart libraries (theme.js), so a colour is never written twice. */
+
+:root {
+  color-scheme: light dark;
+
+  --font: system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --plane: light-dark(#f9f9f7, #0d0d0d);
+  --surface: light-dark(#fcfcfb, #1a1a19);
+  --border: light-dark(rgba(11, 11, 11, 0.1), rgba(255, 255, 255, 0.1));
+
+  --ink: light-dark(#0b0b0b, #f0efec);
+  --ink-2: light-dark(#52514e, #c3c2b7);
+  --ink-muted: #898781;
+  --grid: light-dark(#e1e0d9, #2c2c2a);
+  --axis: light-dark(#c3c2b7, #383835);
+
+  /* Categories, in this order and never reordered by rank. */
+  --cat-1: light-dark(#2a78d6, #3987e5);
+  --cat-2: light-dark(#eb6834, #d95926);
+  --cat-3: light-dark(#1baf7a, #199e70);
+  --cat-4: light-dark(#eda100, #c98500);
+  --cat-5: light-dark(#e87ba4, #d55181);
+  --cat-6: #008300;
+  --cat-7: light-dark(#6250d6, #9085e9);
+  --cat-8: light-dark(#e34948, #e66767);
+
+  /* Categories that have an order: one blue ramp, weakest to strongest. */
+  --ramp-1: light-dark(#86b6ef, #184f95);
+  --ramp-2: light-dark(#3987e5, #2a78d6);
+  --ramp-3: light-dark(#1c5cab, #6da7ec);
+  --ramp-4: light-dark(#0d366b, #b7d3f6);
+
+  --focus: var(--cat-1);
+  --radius: 12px;
+  --pad: 20px;
+  --gap: 16px;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--plane);
+  color: var(--ink);
+  font: 14px/1.45 var(--font);
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+#app,
+.index {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px var(--gap) 48px;
+}
+
+.loading {
+  color: var(--ink-2);
+}
+
+a {
+  color: var(--ink);
+}
+
+/* Header and filters */
+
+.top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--gap);
+}
+
+h1,
+h2 {
+  margin: 0;
+}
+
+.board-title {
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.board-text {
+  margin: 6px 0 0;
+  color: var(--ink-2);
+}
+
+button,
+select,
+input[type="date"],
+summary {
+  font: inherit;
+  color: var(--ink);
+}
+
+.toggle {
+  flex: none;
+  height: 32px;
+  padding: 0 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.toggle[aria-pressed="true"] {
+  background: var(--grid);
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px var(--gap);
+  margin: 20px 0 var(--gap);
+}
+
+.filter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  position: relative;
+}
+
+.filter-label {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.filter-note {
+  max-width: 240px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--ink-2);
+}
+
+.filter-note[hidden] {
+  display: none;
+}
+
+.filter-error {
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 36px;
+}
+
+select,
+input[type="date"],
+.multi summary {
+  height: 36px;
+  min-width: 140px;
+  padding: 0 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.multi summary {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  list-style-position: inside;
+}
+
+.menu {
+  position: absolute;
+  z-index: 5;
+  top: 100%;
+  margin-top: 4px;
+  min-width: 100%;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.check {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.notice {
+  margin: 0 0 var(--gap);
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink-2);
+}
+
+/* Cards */
+
+.card {
+  min-width: 0;
+  padding: var(--pad);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(var(--wide, 4), minmax(0, 1fr));
+  gap: var(--gap);
+  margin-bottom: var(--gap);
+}
+
+.stat.hero {
+  grid-column: span 2;
+}
+
+.stat-label {
+  color: var(--ink-2);
+}
+
+.stat-value {
+  margin-top: 4px;
+  font-size: 32px;
+  font-weight: 600;
+  line-height: 1.2;
+  transition: opacity 150ms ease-out;
+}
+
+.hero .stat-value {
+  font-size: 48px;
+  line-height: 1.1;
+}
+
+.stat-none {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--ink-2);
+  line-height: 1.9;
+}
+
+.stat[data-state="loading"] .stat-value,
+.stat[data-state="refreshing"] .stat-value {
+  opacity: 0.45;
+}
+
+/* The hero figure with its trend: the number on the left, the line on the right. */
+.stat.has-trend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px var(--gap);
+}
+
+.spark {
+  position: relative;
+  flex: 1 1 160px;
+  min-width: 0;
+  height: 84px;
+  transition: opacity 150ms ease-out;
+}
+
+.spark[data-state="loading"] {
+  opacity: 0.45;
+}
+
+.spark-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.spark-canvas[hidden],
+.spark-note[hidden] {
+  display: none;
+}
+
+.spark-note {
+  font-size: 12px;
+  color: var(--ink-2);
+  line-height: 1.4;
+}
+
+/* A little under 900 px the hero takes a row and the tiles share the next one. */
+@media (max-width: 899px) {
+  .stats {
+    grid-template-columns: repeat(var(--mid, 3), minmax(0, 1fr));
+  }
+
+  .stat.hero {
+    grid-column: 1 / -1;
+  }
+}
+
+.charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr));
+  gap: var(--gap);
+}
+
+/* A last chart alone on its row takes the whole row. */
+.charts > .card:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+.chart-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--gap);
+  margin-bottom: 12px;
+}
+
+.chart-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.plot {
+  position: relative;
+  height: 320px;
+}
+
+.host {
+  position: absolute;
+  inset: 0;
+  transition: opacity 150ms ease-out;
+}
+
+.chart[data-state="loading"] .host,
+.chart[data-state="refreshing"] .host {
+  opacity: 0.45;
+}
+
+.state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--ink-2);
+}
+
+.state[hidden],
+.host[hidden] {
+  display: none;
+}
+
+.error,
+.failure {
+  max-width: 420px;
+}
+
+.error-message {
+  margin: 0 0 4px;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.error-id {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.retry {
+  height: 32px;
+  padding: 0 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.host:focus-visible {
+  outline-offset: -2px;
+}
+
+.focus-ring {
+  position: absolute;
+  pointer-events: none;
+  border: 2px solid var(--focus);
+  border-radius: 4px;
+}
+
+.focus-ring[hidden] {
+  display: none;
+}
+
+/* Table view */
+
+.table-wrap {
+  max-height: 320px;
+  overflow: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+th,
+td {
+  padding: 6px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--grid);
+  white-space: nowrap;
+}
+
+th {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  color: var(--ink-2);
+  font-weight: 600;
+}
+
+.table-note {
+  margin: 8px 0 0;
+  color: var(--ink-2);
+}
+
+/* Tooltips: the value first, its label second. */
+
+.tip {
+  position: fixed;
+  z-index: 10;
+  pointer-events: none;
+  padding: 8px 10px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.tip[hidden] {
+  display: none;
+}
+
+.tip-line {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  white-space: nowrap;
+}
+
+.tip-line strong {
+  font-weight: 600;
+}
+
+.tip-line span,
+.tip-context strong {
+  color: var(--ink-2);
+}
+
+.tip-context strong {
+  font-weight: 400;
+}
+
+/* The list of boards */
+
+.index ul {
+  padding-left: 20px;
+}
+
+.index li {
+  margin: 6px 0;
+}
+
+@media (max-width: 600px) {
+  .plot {
+    height: 260px;
+  }
+
+  /* On a phone the tiles are rows: the label on the left, the number on the right. */
+  .stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .stat:not(.hero) .stat-body {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--gap);
+  }
+
+  .stat:not(.hero) .stat-value {
+    margin-top: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}

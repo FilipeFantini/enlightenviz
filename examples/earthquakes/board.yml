@@ -1,49 +1,171 @@
-# An example board, over the invented data in schema.sql.
-# The format is described in docs/boards.md.
+# The example board: filters, stats and three charts over invented data, which
+# lives in schema.sql beside this file. The format is described in
+# docs/boards.md.
 board: earthquakes
 title: Earthquakes, January 2024
 text: Invented data, for trying the server out.
 
+filters:
+  - label: From
+    param: from
+    control: date
+  - label: Regions
+    param: regions
+    control: multiselect
+    options_from: {query: regions, value: value, label: label}
+  - label: Magnitude class
+    param: min_magnitude
+    control: select
+    options:
+      - {value: 0, label: All classes}
+      - {value: 4, label: "4 and above"}
+      - {value: 5, label: "5 and above"}
+      - {value: 6, label: "6 and over"}
+
+stats:
+  - label: Events
+    query: summary
+    value: events
+    format: integer
+    hero: true
+    trend: {query: events_a_day, x: day, value: events}
+  - {label: Strongest, query: summary, value: strongest, format: one_decimal}
+  - {label: Average depth (km), query: summary, value: depth, format: integer}
+  - {label: Regions hit, query: summary, value: regions, format: integer}
+
 queries:
-  by_day:
+  regions:
     sql: |
-      select day, region, events
-      from earthquakes_daily
+      select region as value, region as label
+      from earthquake_events
+      group by region
+      order by region
+
+  summary:
+    sql: |
+      select count(*) as events,
+             max(magnitude) as strongest,
+             round(avg(depth_km)) as depth,
+             count(distinct region) as regions
+      from earthquake_events
       where day >= $from
-        and day <= $to
         and region = any($regions)
-      order by day, region
+        and magnitude >= $min_magnitude
     params:
       from: {type: date, default: "2024-01-01"}
-      to: {type: date, default: "2024-01-30"}
-      regions:
-        type: "list<text>"
-        default: [Andes, Cascadia, Hokkaido, Rift Valley]
+      regions: {type: "list<text>", default: [Aegean, Andes, Cascadia, Hokkaido, Rift Valley, Tonga]}
+      min_magnitude: {type: number, default: 0}
 
-  strongest:
+  events_a_day:
     sql: |
-      select region, max(max_magnitude) as magnitude
-      from earthquakes_daily
-      where events >= $min_events
-      group by region
-      order by magnitude desc, region
+      with days as (
+        select d::date as day
+        from generate_series($from::date, (select max(day) from earthquake_events), interval '1 day') as d
+      )
+      select days.day, count(e.event_id) as events
+      from days
+      left join earthquake_events e
+        on e.day = days.day
+       and e.region = any($regions)
+       and e.magnitude >= $min_magnitude
+      group by days.day
+      order by days.day
     params:
-      min_events: {type: integer, default: 1}
+      from: {type: date, default: "2024-01-01"}
+      regions: {type: "list<text>", default: [Aegean, Andes, Cascadia, Hokkaido, Rift Valley, Tonga]}
+      min_magnitude: {type: number, default: 0}
+
+  daily:
+    sql: |
+      with days as (
+        select d::date as day
+        from generate_series($from::date, (select max(day) from earthquake_events), interval '1 day') as d
+      )
+      select days.day,
+             count(e.event_id) filter (where e.magnitude < 4) as "Under 4",
+             count(e.event_id) filter (where e.magnitude >= 4 and e.magnitude < 5) as "4 to 5",
+             count(e.event_id) filter (where e.magnitude >= 5 and e.magnitude < 6) as "5 to 6",
+             count(e.event_id) filter (where e.magnitude >= 6) as "6 and over"
+      from days
+      left join earthquake_events e
+        on e.day = days.day
+       and e.region = any($regions)
+       and e.magnitude >= $min_magnitude
+      group by days.day
+      order by days.day
+    params:
+      from: {type: date, default: "2024-01-01"}
+      regions: {type: "list<text>", default: [Aegean, Andes, Cascadia, Hokkaido, Rift Valley, Tonga]}
+      min_magnitude: {type: number, default: 0}
+
+  by_region:
+    sql: |
+      select region, count(*) as events
+      from earthquake_events
+      where day >= $from
+        and region = any($regions)
+        and magnitude >= $min_magnitude
+      group by region
+      order by events desc, region
+    params:
+      from: {type: date, default: "2024-01-01"}
+      regions: {type: "list<text>", default: [Aegean, Andes, Cascadia, Hokkaido, Rift Valley, Tonga]}
+      min_magnitude: {type: number, default: 0}
+
+  events:
+    sql: |
+      select event_id::text as event,
+             region || ', ' || to_char(day, 'FMDD Mon') as place,
+             magnitude, depth_km, latitude, longitude
+      from earthquake_events
+      where day >= $from
+        and region = any($regions)
+        and magnitude >= $min_magnitude
+      order by magnitude desc, event_id
+    params:
+      from: {type: date, default: "2024-01-01"}
+      regions: {type: "list<text>", default: [Aegean, Andes, Cascadia, Hokkaido, Rift Valley, Tonga]}
+      min_magnitude: {type: number, default: 0}
 
 charts:
-  - title: Events a day
-    query: by_day
-    vega_lite:
-      mark: bar
-      encoding:
-        x: {field: day, type: temporal}
-        y: {field: events, type: quantitative}
-        color: {field: region, type: nominal}
+  - title: Events a day, by magnitude class
+    query: daily
+    palette: ordered
+    echarts:
+      tooltip: {trigger: item}
+      xAxis: {type: time, axisLabel: {formatter: "{d} {MMM}"}}
+      yAxis: {type: value}
+      series:
+        - {type: bar, name: "Under 4", stack: events, barWidth: "90%", encode: {x: day, y: "Under 4"}}
+        - {type: bar, name: "4 to 5", stack: events, barWidth: "90%", encode: {x: day, y: "4 to 5"}}
+        - {type: bar, name: "5 to 6", stack: events, barWidth: "90%", encode: {x: day, y: "5 to 6"}}
+        - {type: bar, name: "6 and over", stack: events, barWidth: "90%", encode: {x: day, y: "6 and over"}}
 
-  - title: Strongest quake by region
-    query: strongest
-    vega_lite:
-      mark: bar
-      encoding:
-        x: {field: region, type: nominal, sort: "-y"}
-        y: {field: magnitude, type: quantitative}
+  - title: Events by region
+    query: by_region
+    echarts:
+      tooltip: {trigger: item}
+      xAxis: {type: value}
+      yAxis: {type: category, inverse: true}
+      series:
+        - type: bar
+          name: Events
+          encode: {x: events, y: region}
+          label: {show: true, position: right}
+
+  - title: Where they happened
+    query: events
+    echarts:
+      tooltip: {trigger: item}
+      geo: {map: world, roam: false}
+      visualMap:
+        show: false
+        dimension: magnitude
+        min: 2.5
+        max: 7.5
+        seriesIndex: 0
+        inRange: {symbolSize: [6, 14]}
+      series:
+        - type: scatter
+          coordinateSystem: geo
+          encode: {lng: longitude, lat: latitude, value: magnitude, tooltip: [magnitude, place, depth_km]}

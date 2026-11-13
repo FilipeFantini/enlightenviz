@@ -1,15 +1,16 @@
 # Writing a board
 
 A board is one YAML file: the SQL a dashboard runs, the parameters that SQL
-accepts, and the charts that draw its results. This page describes the format
+accepts, the filters that set those parameters, and the stats and charts that
+show the results. This page describes the format
 completely; the JSON Schema of the same format is printed by
 `enlightenviz schema` and committed as
 [`schema/board.schema.json`](../schema/board.schema.json). A working example is
 [`examples/earthquakes/board.yml`](../examples/earthquakes/board.yml).
 
-What exists today is the format, `validate`, and the JSON route that answers a
-query. There is no page yet: a chart is validated and kept, not drawn. See the
-[README](../README.md#known-gaps).
+What exists today is the format, `validate`, the JSON route that answers a
+query, and the page that draws a board in the browser (see "The page"). There
+are no live updates yet. See the [README](../README.md#known-gaps).
 
 ## Files
 
@@ -29,6 +30,8 @@ query. There is no page yet: a chart is validated and kept, not drawn. See the
 | `board` | name | yes | The board's id. Part of every URL. Unique across the directory. |
 | `title` | text | yes | The title shown above the board. |
 | `text` | text | no | Text shown under the title. |
+| `filters` | list of filter | no | The controls above the board, in order. See "A filter". |
+| `stats` | list of stat | no | The figures above the charts, in order. See "A stat". |
 | `queries` | map of name to query | yes | The queries, by name. |
 | `charts` | list of chart | yes | The charts, in order. At least one. |
 
@@ -97,23 +100,210 @@ A type with `<` in it must be quoted in YAML. A default is checked when the boar
 loads: write `default: "2024-02-30"` and `validate` says the date does not exist.
 Quote text and dates; a bare `default: 5` is a number, not text.
 
+## A filter
+
+```yaml
+filters:
+  - {label: From, param: from, control: date}
+  - {label: Regions, param: regions, control: multiselect,
+     options_from: {query: regions, value: value, label: label}}
+  - label: Magnitude class
+    param: min_magnitude
+    control: select
+    options:
+      - {value: 0, label: All classes}
+      - {value: 4, label: "4 and above"}
+```
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `label` | text | yes | Shown with the control. |
+| `param` | parameter name | yes | The parameter the filter sets. |
+| `control` | `select`, `multiselect` or `date` | yes | How it is drawn. It must fit the parameter's type (below). |
+| `options` | list of `{value, label}` | for `select` and `multiselect` | A fixed list. `value` is written as the parameter's type: a quoted string for text, a number for integer and number, `true` or `false` for boolean. |
+| `options_from` | `{query, value, label}` | for `select` and `multiselect` | Take the options from a query of this board: `value` and `label` are two of its columns. The query is run once, without parameters, so every parameter it declares needs a default. |
+
+Give `options` or `options_from`, not both; a `date` filter has neither.
+
+A filter sets the parameter of its name **in every query that declares it**: the
+page asks again only the queries that declare it. So those declarations must
+agree: the same type, the same default and the same `max_items`, and the
+default must exist (it is the filter's starting value). A filter whose
+parameter no query declares, and two filters for one parameter, are errors.
+
+| `control` | Fits a parameter of type |
+|---|---|
+| `select` | `text`, `integer`, `number`, `boolean` |
+| `multiselect` | any list type |
+| `date` | `date` |
+
+The state of the filters is in the URL's query string (`?min_magnitude=5&regions=Andes&regions=Tonga`),
+and only what differs from the defaults is written, so a link reproduces the
+view. A multiselect always keeps at least one choice: an empty list cannot be
+sent in a query string, and would silently fall back to the default.
+
+## A stat
+
+```yaml
+stats:
+  - label: Events
+    query: summary
+    value: events
+    format: integer
+    hero: true
+    trend: {query: events_a_day, x: day, value: events}
+  - {label: Strongest, query: summary, value: strongest, format: one_decimal}
+```
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `label` | text | yes | Shown with the number. |
+| `query` | text | yes | A query of this board. It must return exactly one row; any other count is an error shown in the tile. |
+| `value` | text | yes | The column that holds the number. A `null` is shown as "No data". |
+| `format` | `integer`, `one_decimal` or `compact` | no | `12,345`, `5.4`, `12.3K`. Without it: up to two decimals. |
+| `hero` | boolean | no | The headline figure, drawn larger. At most one stat. |
+| `trend` | `{query, x, value}` | no | A small line drawn beside the number, from a query of this board: `x` is the column that orders the points (a day, say; it is not drawn) and `value` the column that holds each point. |
+
+The trend is a sparkline: a 2 px line in the muted colour, no axes, the last
+point marked in blue and its value written above it. The filters
+apply to the trend's query as to any other, and it is drawn again, animated,
+when they change. A trend that fails, or has no rows, says so in its place and
+leaves the number alone. The number counts up (or down) to a new value over
+about 300 ms, unless the visitor asks for reduced motion.
+
 ## A chart
 
 | Field | Type | Required | Meaning |
 |---|---|---|---|
 | `title` | text | yes | The title of the chart. |
 | `query` | text | yes | The name of a query of this board. |
-| `vega_lite` | map | yes | A [Vega-Lite](https://vega.github.io/vega-lite/) specification. |
+| `echarts` | map | yes | An [Apache ECharts](https://echarts.apache.org/) option. |
+| `palette` | `categorical` or `ordered` | no | Where the series take their colours from. See below. |
 
-The specification is kept as written. `validate` reads two things from it. Every
-`"field": "<name>"` anywhere in it must be a column the query returns, or a name a
-transform creates with `as` (`{calculate: "...", as: double}`, `{fold: [...], as:
-[key, value]}`). A field with a path (`a.b`, `a[0]`) is accepted when its first
-part is a column; `\.` writes a literal dot. Limits: a name a transform creates
-without writing `as` (such as an aggregate's default name) is reported as
-unknown, so write `as`; the plural `fields` and `groupby` lists are not read; a
-`field` that is not a string is skipped. This check needs a database; without one
-it is skipped, and `validate` says so.
+The option is kept as written, and **what it may contain is short**:
+
+- **Series are `bar`, `line` or `scatter`, and at least one.** These are the
+  kinds the house theme styles and the tests draw (the example draws a bar and a
+  scatter; the line is styled but untested). Any other `type` is an error that
+  names the three. The reason is practical: ECharts has more chart kinds than
+  anyone can check here, and the data-carrying ones read their own keys. `graph`
+  and `sankey` read `nodes` and `links`, `radar` reads `indicator`; none of
+  these has a column of the chart's query to belong to, so there is nothing for
+  the page to fill in. Series are only read at the top level of the option, so
+  `baseOption`, `media` and `timeline`, which hide a second list of them, are
+  refused there.
+- **A `tooltip` object holds only `show` and `trigger`**, wherever it appears
+  (the option's, a series', an axis'). ECharts renders a tooltip's `formatter`
+  string as HTML, so a formatter written by a board could make markup out of the
+  rows. The page keeps one `formatter` of its own at the top, which builds the
+  tooltip as DOM nodes (a `div` per line with a `strong` and a `span`, filled
+  with `textContent`), so markup in the data is shown as text; the browser test
+  hovers the bars and asserts the tooltip holds nothing the page did not create.
+  There is no `toolbox`.
+- **No data and no link.** `data`, `datasets`, `dataset`, `url` and `href` carry
+  data; `link`, `sublink`, `target` and `image` make a link or load a picture.
+  All are refused anywhere in the option. The page adds the rows of the chart's
+  query itself, as the option's dataset. The one static dataset is the world
+  outline (Natural Earth 110m, without Antarctica), which the page provides under
+  the reserved name `world`: a `geo` or a series may say `map: world`. The page
+  draws it with longitude and latitude at one scale (equirectangular), and sizes
+  the card of a chart that draws it to the outline's proportions.
+
+A string that starts `http://`, `https://`, `//` or `image://` is also refused,
+as an early and helpful error for a symbol or a link that would make the browser
+request something. **It is not a URL filter**: a URL can be written in ways a
+prefix does not see. What stops a load is the page's content security policy
+(`img-src 'self' data:`, `connect-src 'self'`), and what stops a navigation is
+that the keys that make one are refused.
+
+The page sizes the chart to its card, so do not write the size of the chart. It
+also sets the house theme (colours, fonts, gridlines, bar thickness and corners,
+point sizes, tooltip, hover emphasis, animation, the 24 px hit area of a
+scatter's points) underneath what the option says, so an option that says
+nothing about style looks finished, and one that says something wins. Write the
+series with `encode` (which columns are x and y) and let the page do the rest.
+
+**`palette`.** A chart's series take the eight categorical colours, in their
+fixed order, which is what `categorical` (the default) means. `ordered` is for
+classes that have an order, such as magnitude classes: the series take the
+four-step blue ramp, from weakest to strongest, in the order they are drawn.
+It is a field of the board and not part of the option because an ECharts option
+can only name colours as values, and a value that is right in the light colour
+scheme is wrong in the dark one. A colour is chosen by the position of the
+series in the option, not by the rows that happen to be present, so a filter that
+removes a category does not repaint the others.
+
+### What `validate` checks in an option
+
+Without a database `validate` reads the option alone: the rules above (series
+types, tooltip keys, `toolbox`, refused keys and link prefixes). With a database
+it also reads the places where an option names a column of the rows: every value
+in `encode` (a name or a list of names; a number is a position and is skipped),
+every name in `dimensions` (a string, or an object's `name`), and `dimension`
+inside `visualMap`; each must be a column the query returns.
+
+### What `validate` does not check
+
+Said plainly, because a green `validate` is not a clean bill of health:
+
+- **That a key of an option exists.** ECharts has no published schema to check
+  an option against. A misspelt key draws nothing or the wrong thing, and
+  `validate` stays silent.
+- **That an option is safe.** A board is trusted code, written by the operator
+  and reviewed like any other change. The rules above close the paths the page
+  would otherwise open to markup, data and links; they are a rule of the format,
+  not a defence against a hostile author, and the list is not exhaustive. Text
+  that ECharts draws on the canvas (titles, labels, legends, series names) is
+  not HTML and is not restricted.
+- **A column written in text:** a tooltip template's `{@name}` (the tooltip is
+  the page's, so a template is refused anyway), `series.name` and other text, a
+  column reached by position, and anything the page adds.
+- **That a chart looks right.** Whether the encoded columns make a readable
+  chart, or a `line` or a `visualMap` is configured well, is for the eye; the
+  example's screenshots are in `docs/visuals/`.
+- **Without a database,** that the SQL prepares and that the columns exist.
+  `validate` says that it skipped them.
+
+## The page
+
+```
+GET /                       the list of boards
+GET /boards/{board}         the board's page
+GET /api/boards/{board}     the board's definition, as JSON
+GET /assets/{hash}/{name}   the scripts, styles and libraries, embedded in the binary
+```
+
+The page is a shell with no data and no inline script or style. Its script asks
+`/api/boards/{board}` for the definition (title, text, filters with their type
+and default and options, stats, charts with their specification, and each
+query's parameters), builds the filter row and the cards, and asks each query
+for its rows with the filters' values. A change of filter asks again only the
+queries that declare its parameter; a chart keeps its previous frame at reduced
+opacity while it waits, then animates to the new data (about 300 ms), or does
+not animate when the visitor asks for reduced motion.
+
+Every HTML answer carries
+`Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
+`X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`. A library
+that needs a weaker policy is not used. Assets live at `/assets/{hash}/{name}`,
+where `hash` is computed from all of them at start, and are cached for a year
+(`immutable`); a new binary has a new hash.
+
+A query that fails shows its message and its id in that chart's card; a query
+with no rows says so. The page is light or dark with the system, and a
+button wins either way. Text from data is put in the page as text, never as
+markup: in the tiles, the table view, the filters' options and the tooltip,
+which is built as DOM nodes. The browser test loads a board whose data is markup
+(`tests/browser/hostile/`) and asserts that no element comes from it and that the
+text is shown literally. In the table view of a chart the first 500 rows are
+listed.
+
+Two things a filter says at its control, in small text, rather than leaving the
+control looking right while the charts do something else. When the value in use
+(a default, say) is not among the options an `options_from` query returned, the
+control names it. When an options query returns a row whose value is `NULL`, the
+option is not offered, because the browser would send it as the text "null", and
+the control says how many options have no value and are not shown.
 
 ## Running a query
 
@@ -165,7 +355,7 @@ enlightenviz validate <dir> [--format text|json]
 Without a database it checks the YAML, the shape, the parameters, the SQL and
 which query each chart reads. With one (`ENLIGHTENVIZ_DATABASE_URL` and
 `--allow-unencrypted-database`, see the README) it also prepares every query in a
-read-only transaction and checks the charts' fields against the columns. Every
+read-only transaction and checks that the columns that charts, stats and filters name are columns the queries return. Every
 problem is reported, not only the first; each has the file, the line where it can
 be known, a rule id, a message and what to change. Exit code `0`: nothing wrong;
 `1`: a board has a problem; `2`: the run itself failed (no directory, bad
@@ -191,6 +381,16 @@ reported at the `sql` key, with the line within the query in the message.
 | `board-duplicate` | Two files use the same board id. |
 | `board-no-charts` | `charts` is empty. |
 | `chart-unknown-query` | A chart reads a query the board does not declare. |
+| `chart-spec-forbidden` | An option carries what it may not: `data`, `datasets`, `dataset`, `url`, `href`, `link`, `sublink`, `target`, `image`, a `toolbox`, a `tooltip` key other than `show` and `trigger`, `baseOption`, `media` or `timeline` at the top, or a string that starts `http://`, `https://`, `//`, `image://`. |
+| `chart-series-type` | An option has no series, or a series whose `type` is not `bar`, `line` or `scatter`. |
+| `filter-unknown-param` | A filter drives a parameter no query declares. |
+| `filter-duplicate` | Two filters drive one parameter. |
+| `filter-param-conflict` | The queries a filter drives declare its parameter with different types, defaults or `max_items`. |
+| `filter-param-required` | A parameter a filter drives has no default in some query. |
+| `filter-control-type` | The control does not fit the parameter's type. |
+| `filter-options-invalid` | The options are missing, doubled, empty, on a `date` filter, not of the parameter's type, do not include the default, or `options_from` names an unknown query or one that needs a parameter without a default. |
+| `stat-unknown-query` | A stat, or its `trend`, reads a query the board does not declare. |
+| `stat-hero-multiple` | More than one stat is `hero`. |
 | `param-default-invalid` | A default is not a valid value of its type. |
 | `param-max-items-invalid` | `max_items` on a non-list, or outside 1 to 1000. |
 | `sql-undeclared-param` | The SQL uses a `$name` that is not declared. |
@@ -206,10 +406,14 @@ reported at the `sql` key, with the line within the query in the message.
 | `sql-prepare-timeout` | (With a database) preparing ran past the statement timeout. |
 | `sql-not-a-select` | (With a database) the statement is not a read-only `SELECT`. |
 | `query-column-duplicate` | (With a database) two output columns have one name. |
-| `chart-unknown-field` | (With a database) a chart draws a field that is no column and no `as`. |
+| `chart-unknown-field` | (With a database) a chart names a column in `encode`, `dimensions` or `visualMap` that the query does not return. |
+| `stat-unknown-column` | (With a database) a stat's `value`, or its trend's `x` or `value`, is not a column of the query. |
+| `filter-unknown-column` | (With a database) an `options_from` `value` or `label` is not a column of its query. |
 
 ## Not in this format yet
 
-No `refresh` or live updates, no filters bound to parameters, no choice of data
-source, no cache settings, no `ref()` to dbt models. They are later slices of
+No `refresh` or live updates, no choice of data source, no cache settings, no
+`ref()` to dbt models, no selection in one chart that filters another, no
+layout control (the stats come first, then the charts in order; a last chart
+alone on its row takes the whole row). They are later slices of
 [the design](design.md); a board that uses one is rejected as an unknown field.

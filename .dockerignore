@@ -2,3 +2,5 @@
 !Cargo.toml
 !Cargo.lock
 !src
+!web
+!vendor

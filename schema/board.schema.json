@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "enlightenviz board",
-  "description": "A dashboard: named queries, and charts that draw their results. One board\nis one YAML file.",
+  "description": "A dashboard: named queries, filters, figures and charts that draw their\nresults. One board is one YAML file.",
   "type": "object",
   "properties": {
     "board": {
@@ -17,6 +17,13 @@
       },
       "minItems": 1
     },
+    "filters": {
+      "description": "The filters shown above the board, in order. Each one drives the\nparameter of its name in every query that declares it.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Filter"
+      }
+    },
     "queries": {
       "description": "The queries of the board, by name. The name is part of the URL, and has\nthe same form as the id of a board.",
       "type": "object",
@@ -25,6 +32,13 @@
       },
       "propertyNames": {
         "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,62}$"
+      }
+    },
+    "stats": {
+      "description": "The figures shown above the charts: one value of one query each.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Stat"
       }
     },
     "text": {
@@ -49,9 +63,26 @@
   ],
   "$defs": {
     "Chart": {
-      "description": "A chart: a Vega-Lite specification that draws the result of a query.",
+      "description": "A chart: an Apache ECharts option that draws the result of a query. The\noption carries no data: the page adds the rows of the query.",
       "type": "object",
       "properties": {
+        "echarts": {
+          "description": "An Apache ECharts option, kept as it is. `validate` refuses data and\nlinks in it, and checks that the columns `encode`, `dimensions` and\n`visualMap` name are columns of the query.",
+          "type": "object",
+          "additionalProperties": true
+        },
+        "palette": {
+          "description": "The colours the series take: `categorical` (default) or `ordered`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Palette"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "query": {
           "description": "The name of the query this chart draws; a key of `queries`.",
           "type": "string"
@@ -59,18 +90,135 @@
         "title": {
           "description": "The title of the chart.",
           "type": "string"
-        },
-        "vega_lite": {
-          "description": "A Vega-Lite specification, kept as it is. `validate` checks only that\nevery `field` it names is a column of the query, or is created by a\ntransform's `as`.",
-          "type": "object",
-          "additionalProperties": true
         }
       },
       "additionalProperties": false,
       "required": [
         "title",
         "query",
-        "vega_lite"
+        "echarts"
+      ]
+    },
+    "Control": {
+      "description": "How a filter is drawn and what it lets the visitor choose.",
+      "oneOf": [
+        {
+          "description": "One value out of the options; for a scalar parameter.",
+          "type": "string",
+          "const": "select"
+        },
+        {
+          "description": "Any number of the options, at least one; for a list parameter.",
+          "type": "string",
+          "const": "multiselect"
+        },
+        {
+          "description": "A calendar date; for a `date` parameter.",
+          "type": "string",
+          "const": "date"
+        }
+      ]
+    },
+    "Filter": {
+      "description": "A control above the board that sets one parameter.",
+      "type": "object",
+      "properties": {
+        "control": {
+          "description": "How the filter is drawn. It must fit the type of the parameter:\n`select` for text, integer, number or boolean, `multiselect` for a\nlist, `date` for a date.",
+          "$ref": "#/$defs/Control"
+        },
+        "label": {
+          "description": "The label shown with the control.",
+          "type": "string"
+        },
+        "options": {
+          "description": "For `select` and `multiselect`: the options as a fixed list. Give this\nor `options_from`, not both. A `date` filter has neither.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/FilterOption"
+          }
+        },
+        "options_from": {
+          "description": "For `select` and `multiselect`: take the options from a query of this\nboard, run once without parameters.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OptionsFrom"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "param": {
+          "description": "The parameter this filter sets, in every query that declares it.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "label",
+        "param",
+        "control"
+      ]
+    },
+    "FilterOption": {
+      "description": "One fixed option of a filter.",
+      "type": "object",
+      "properties": {
+        "label": {
+          "description": "The text shown to the visitor.",
+          "type": "string"
+        },
+        "value": {
+          "description": "The value sent as the parameter: a quoted string for text and dates, a\nnumber for integer and number, `true` or `false` for boolean."
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "label"
+      ]
+    },
+    "OptionsFrom": {
+      "description": "Where the options of a filter come from.",
+      "type": "object",
+      "properties": {
+        "label": {
+          "description": "The column that holds the text shown to the visitor.",
+          "type": "string"
+        },
+        "query": {
+          "description": "A query of this board. It is run without parameters, so every\nparameter it declares needs a default.",
+          "type": "string"
+        },
+        "value": {
+          "description": "The column that holds the value sent as the parameter.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "query",
+        "value",
+        "label"
+      ]
+    },
+    "Palette": {
+      "description": "Which colours a chart takes its series from.",
+      "oneOf": [
+        {
+          "description": "The eight categorical colours, in their fixed order (the default).",
+          "type": "string",
+          "const": "categorical"
+        },
+        {
+          "description": "The four-step blue ramp, weakest to strongest, for classes that have\nan order.",
+          "type": "string",
+          "const": "ordered"
+        }
       ]
     },
     "Param": {
@@ -179,6 +327,103 @@
       "additionalProperties": false,
       "required": [
         "sql"
+      ]
+    },
+    "Stat": {
+      "description": "A figure shown above the charts: one column of the single row a query\nreturns.",
+      "type": "object",
+      "properties": {
+        "format": {
+          "description": "How the number is written. Without it, up to two decimals.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StatFormat"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "hero": {
+          "description": "The headline figure of the board, drawn larger. At most one stat.",
+          "type": "boolean",
+          "default": false
+        },
+        "label": {
+          "description": "The label shown with the number.",
+          "type": "string"
+        },
+        "query": {
+          "description": "The name of the query; a key of `queries`. It must return one row.",
+          "type": "string"
+        },
+        "trend": {
+          "description": "A small line drawn beside the number: how it came to be.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Trend"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "value": {
+          "description": "The column that holds the number.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "label",
+        "query",
+        "value"
+      ]
+    },
+    "StatFormat": {
+      "description": "How a stat's number is written.",
+      "oneOf": [
+        {
+          "description": "A whole number with thousands separators: 12,345.",
+          "type": "string",
+          "const": "integer"
+        },
+        {
+          "description": "One decimal: 5.4.",
+          "type": "string",
+          "const": "one_decimal"
+        },
+        {
+          "description": "A short form for large numbers: 12.3K, 4.5M.",
+          "type": "string",
+          "const": "compact"
+        }
+      ]
+    },
+    "Trend": {
+      "description": "The data of a stat's sparkline.",
+      "type": "object",
+      "properties": {
+        "query": {
+          "description": "A query of this board, which gives the points in the order they are\ndrawn. The filters apply to it like to any query.",
+          "type": "string"
+        },
+        "value": {
+          "description": "The column that holds the value of each point.",
+          "type": "string"
+        },
+        "x": {
+          "description": "The column that orders the points (a day, say): it is not drawn.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "query",
+        "x",
+        "value"
       ]
     }
   }

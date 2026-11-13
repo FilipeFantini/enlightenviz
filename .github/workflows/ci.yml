@@ -89,3 +89,19 @@ jobs:
           docker run --rm enlightenviz-image:ci --version
           test "$(docker image inspect enlightenviz-image:ci --format '{{.Config.User}}')" = "65532:65532"
           docker image ls enlightenviz-image:ci
+
+  browser:
+    name: browser smoke test, closed network
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Builds the server image and a headless Chromium image, puts both and a
+      # throwaway Postgres on a Docker network with no route out (--internal),
+      # and drives the example board in the browser: every chart draws, the
+      # console has no error and no CSP violation, and no request leaves for
+      # another host. The base images are pinned by digest; Chromium itself comes
+      # from Alpine's package repository for that release.
+      - name: Smoke test
+        run: tests/browser/run.sh smoke

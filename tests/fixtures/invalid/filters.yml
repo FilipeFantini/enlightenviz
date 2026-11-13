@@ -1,0 +1,48 @@
+board: filters
+title: Filters
+filters:
+  - {label: Nowhere, param: missing, control: select, options: [{value: a, label: A}]}
+  - {label: Day, param: day, control: date}
+  - {label: Day again, param: day, control: date}
+  - {label: Kind, param: kind, control: select, options: [{value: a, label: A}]}
+  - {label: Limit, param: limit, control: multiselect, options: [{value: 1, label: One}]}
+  - {label: Count, param: count, control: select, options: [{value: 1, label: One}, {value: x, label: Ex}, {value: 1, label: Again}]}
+  - {label: Day with options, param: when, control: date, options: [{value: a, label: A}]}
+  - {label: No options, param: group, control: select}
+  - {label: Both, param: set, control: multiselect, options: [{value: a, label: A}], options_from: {query: a, value: n, label: n}}
+  - {label: Unknown query, param: pick, control: select, options_from: {query: nope, value: n, label: n}}
+  - {label: Needs a parameter, param: scale, control: select, options_from: {query: needs, value: n, label: n}}
+  - {label: Default outside, param: color, control: select, options: [{value: red, label: Red}]}
+  - {label: Select on a date, param: dayonly, control: select, options: [{value: "2024-01-01", label: First}]}
+  - {label: Level, param: level, control: select, options: [{value: a, label: A}]}
+  - {label: Empty, param: shape, control: select, options: []}
+queries:
+  a:
+    sql: select $day::date as n, $kind as k, $limit as l, $count as c, $when as w, $group as g, $set as s, $pick as p, $color as co, $shape as sh, $scale as sc, $dayonly as d2, $level as lv
+    params:
+      day: {type: date, default: "2024-01-01"}
+      kind: {type: text, default: a}
+      limit: {type: integer, default: 1}
+      count: {type: integer, default: 1}
+      when: {type: date, default: "2024-01-01"}
+      group: {type: text, default: a}
+      set: {type: "list<text>", default: [a]}
+      pick: {type: text, default: a}
+      color: {type: text, default: blue}
+      shape: {type: text, default: round}
+      scale: {type: integer, default: 1}
+      dayonly: {type: date, default: "2024-01-01"}
+      level: {type: text}
+  b:
+    sql: select $day as n, $kind as k
+    params:
+      day: {type: text, default: "2024-01-01"}
+      kind: {type: text, default: b}
+  needs:
+    sql: select $n::int as n
+    params:
+      n: {type: integer}
+charts:
+  - title: C
+    query: a
+    echarts: {series: [{type: bar}]}

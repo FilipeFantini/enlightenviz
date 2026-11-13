@@ -1,0 +1,45 @@
+board: chart-spec
+title: Chart specifications
+queries:
+  a:
+    sql: select 1 as n, 'x' as label
+charts:
+  - title: Data in the specification
+    query: a
+    echarts:
+      dataset: {source: []}
+      series:
+        - {type: bar, data: [1, 2]}
+  - title: Links and images
+    query: a
+    echarts:
+      title: {text: t, link: "https://example.com/", sublink: "x", target: blank}
+      series:
+        - {type: scatter, symbol: "image://point.png"}
+        - {type: scatter, symbol: "//cdn.example.com/p.png"}
+  - title: A url, an href and an image
+    query: a
+    echarts:
+      series:
+        - {type: bar, url: "x", href: "y", image: "z"}
+  - title: The world map is allowed, a world dataset is not
+    query: a
+    echarts:
+      geo: {map: world}
+      series:
+        - {type: bar, data: {name: world}}
+  - title: The tooltip belongs to the page
+    query: a
+    echarts:
+      tooltip: {trigger: item, formatter: "<img src=x onerror=alert(1)>"}
+      series:
+        - type: bar
+          tooltip: {show: true, extraCssText: "x"}
+      xAxis: {tooltip: {formatter: "<b>"}}
+  - title: No toolbox, and no second list of series
+    query: a
+    echarts:
+      toolbox: {feature: {dataView: {title: "<b>"}}}
+      timeline: {}
+      series:
+        - {type: bar}

@@ -14,4 +14,4 @@ queries:
 charts:
   - title: A
     query: unused
-    vega_lite: {mark: point}
+    echarts: {series: [{type: bar}]}

@@ -235,6 +235,12 @@ async fn validation_against_a_database_finds_what_offline_cannot() {
             Some(22),
             "chart-unknown-field",
         ),
+        ("columns.yml".to_string(), Some(4), "filter-unknown-column"),
+        ("columns.yml".to_string(), Some(7), "stat-unknown-column"),
+        ("columns.yml".to_string(), Some(8), "stat-unknown-column"),
+        ("columns.yml".to_string(), Some(19), "chart-unknown-field"),
+        ("columns.yml".to_string(), Some(20), "chart-unknown-field"),
+        ("columns.yml".to_string(), Some(22), "chart-unknown-field"),
         (
             "duplicate_column.yml".to_string(),
             Some(5),
@@ -302,7 +308,7 @@ async fn the_server_does_not_start_on_a_bad_board() {
     )
     .await
     {
-        Err(PrepareError::Invalid(found)) => assert_eq!(found.len(), 6),
+        Err(PrepareError::Invalid(found)) => assert_eq!(found.len(), 12),
         other => panic!("expected the start to be refused, got {:?}", other.err()),
     }
 }
@@ -325,7 +331,7 @@ async fn the_serve_command_stops_with_the_diagnostics_on_a_bad_board() {
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
         stderr.contains("error[chart-unknown-field]")
-            && stderr.contains("not starting: 6 error(s)"),
+            && stderr.contains("not starting: 12 error(s)"),
         "{stderr}"
     );
     assert!(!stderr.contains("reader-test-only"), "{stderr}");
@@ -831,4 +837,280 @@ async fn a_client_that_disconnects_mid_query_does_not_wedge_the_pool() {
             .status,
         200
     );
+}
+
+// ------------------------------------------------------------------ pages
+
+const BOARD: &str = "examples/earthquakes";
+
+/// The policy of the design, word for word: it is never weakened to make a
+/// library work.
+const POLICY: &str = "content-security-policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+
+fn assert_page_headers(reply: &Reply) {
+    assert_eq!(reply.status, 200, "{}", reply.head);
+    for header in [
+        "content-type: text/html; charset=utf-8",
+        POLICY,
+        "x-content-type-options: nosniff",
+        "referrer-policy: no-referrer",
+    ] {
+        assert!(
+            reply.head.contains(header),
+            "missing `{header}` in\n{}",
+            reply.head
+        );
+    }
+}
+
+/// The `src` of every script and the `href` of every stylesheet of a page.
+fn page_files(html: &str) -> Vec<String> {
+    let mut files = Vec::new();
+    for marker in ["src=\"", "href=\"/assets/"] {
+        for part in html.split(marker).skip(1) {
+            let value = part.split('"').next().unwrap();
+            let value = if marker.starts_with("href") {
+                format!("/assets/{value}")
+            } else {
+                value.to_string()
+            };
+            files.push(value);
+        }
+    }
+    files
+}
+
+#[tokio::test]
+async fn the_index_lists_the_boards_under_the_policy() {
+    let server = start(BOARD, Options::default()).await;
+    let reply = get(server.addr, "/").await;
+    assert_page_headers(&reply);
+    assert!(
+        reply
+            .body
+            .contains("<a href=\"/boards/earthquakes\">Earthquakes, January 2024</a>"),
+        "{}",
+        reply.body
+    );
+}
+
+#[tokio::test]
+async fn a_board_page_has_the_policy_and_no_inline_code() {
+    let server = start(BOARD, Options::default()).await;
+    let page = get(server.addr, "/boards/earthquakes").await;
+    assert_page_headers(&page);
+    // The policy forbids inline script and style, so the page has none.
+    assert!(!page.body.contains("<script>"), "{}", page.body);
+    assert!(!page.body.contains("<style"), "{}", page.body);
+    assert!(!page.body.contains(" style="), "{}", page.body);
+    assert!(!page.body.contains(" onclick="), "{}", page.body);
+    // Nothing is loaded from another host.
+    assert!(!page.body.contains("http://") && !page.body.contains("https://"));
+    let files = page_files(&page.body).join(" ");
+    assert!(files.contains("/echarts.min.js") && files.contains("/app.js"));
+}
+
+#[tokio::test]
+async fn assets_are_served_under_their_hash_and_cached_for_a_year() {
+    let server = start(BOARD, Options::default()).await;
+    let page = get(server.addr, "/boards/earthquakes").await;
+    let files = page_files(&page.body);
+    let app = files.iter().find(|f| f.ends_with("/app.js")).unwrap();
+    let css = files.iter().find(|f| f.ends_with("/page.css")).unwrap();
+    let hash = app.split('/').nth(2).unwrap().to_string();
+    assert_eq!(hash.len(), 16);
+
+    let reply = get(server.addr, app).await;
+    assert_eq!(reply.status, 200);
+    assert!(
+        reply
+            .head
+            .contains("content-type: text/javascript; charset=utf-8")
+    );
+    assert!(
+        reply
+            .head
+            .contains("cache-control: public, max-age=31536000, immutable")
+    );
+    assert!(reply.head.contains("x-content-type-options: nosniff"));
+    assert_eq!(reply.body, include_str!("../web/app.js"));
+    let reply = get(server.addr, css).await;
+    assert!(
+        reply.head.contains("content-type: text/css; charset=utf-8"),
+        "{}",
+        reply.head
+    );
+
+    // A vendored library is served byte for byte.
+    let library = get(server.addr, &format!("/assets/{hash}/echarts.min.js")).await;
+    assert_eq!(library.status, 200);
+    assert_eq!(
+        library.body.len() as u64,
+        std::fs::metadata("vendor/echarts.min.js").unwrap().len()
+    );
+
+    // Another hash, another name, and a path out of the table are 404s.
+    for target in [
+        "/assets/0000000000000000/app.js".to_string(),
+        format!("/assets/{hash}/missing.js"),
+        format!("/assets/{hash}/..%2FCargo.toml"),
+        format!("/assets/{hash}/%2E%2E%2Fsrc%2Fmain.rs"),
+    ] {
+        let reply = get(server.addr, &target).await;
+        assert_eq!(reply.status, 404, "{target}");
+        assert_eq!(reply.error_code(), "not_found");
+    }
+}
+
+#[tokio::test]
+async fn every_file_a_script_imports_is_embedded() {
+    let server = start(BOARD, Options::default()).await;
+    let page = get(server.addr, "/boards/earthquakes").await;
+    let files = page_files(&page.body);
+    let app = files.iter().find(|f| f.ends_with("/app.js")).unwrap();
+    let base = app.rsplit_once('/').unwrap().0.to_string();
+
+    // Follow the relative paths ("./name") from app.js through every module.
+    let mut todo = vec!["app.js".to_string()];
+    let mut seen = Vec::new();
+    while let Some(name) = todo.pop() {
+        if seen.contains(&name) {
+            continue;
+        }
+        let reply = get(server.addr, &format!("{base}/{name}")).await;
+        assert_eq!(reply.status, 200, "{name} is imported but not served");
+        if name.ends_with(".js") || name.ends_with(".mjs") {
+            for part in reply.body.split("\"./").skip(1) {
+                todo.push(part.split('"').next().unwrap().to_string());
+            }
+        }
+        seen.push(name);
+    }
+    assert!(seen.len() >= 8, "{seen:?}");
+    assert!(seen.contains(&"world-110m.json".to_string()));
+}
+
+#[tokio::test]
+async fn the_definition_tells_the_page_what_the_board_is() {
+    let server = start(BOARD, Options::default()).await;
+    let reply = get(server.addr, "/api/boards/earthquakes").await;
+    assert_eq!(reply.status, 200);
+    assert!(reply.head.contains("content-type: application/json"));
+    assert!(reply.head.contains("cache-control: no-store"));
+    let board = reply.json();
+    assert_eq!(board["id"], "earthquakes");
+    assert_eq!(board["title"], "Earthquakes, January 2024");
+
+    let filters = board["filters"].as_array().unwrap();
+    assert_eq!(filters.len(), 3);
+    assert_eq!(filters[0]["control"], "date");
+    assert_eq!(filters[0]["type"], "date");
+    assert_eq!(filters[0]["default"], "2024-01-01");
+    assert_eq!(filters[1]["control"], "multiselect");
+    assert_eq!(filters[1]["type"], "list<text>");
+    assert_eq!(filters[1]["options_from"]["query"], "regions");
+    assert_eq!(filters[1]["default"].as_array().unwrap().len(), 6);
+    assert_eq!(
+        filters[2]["options"][1],
+        json!({"value": 4, "label": "4 and above"})
+    );
+
+    let stats = board["stats"].as_array().unwrap();
+    assert_eq!(stats.len(), 4);
+    assert_eq!(stats[0]["hero"], true);
+    assert_eq!(
+        stats[0]["trend"],
+        json!({"query": "events_a_day", "x": "day", "value": "events"})
+    );
+    assert!(stats[1]["trend"].is_null());
+    assert_eq!(stats[1]["format"], "one_decimal");
+
+    let charts = board["charts"].as_array().unwrap();
+    assert_eq!(charts.len(), 3);
+    assert_eq!(charts[0]["palette"], "ordered");
+    assert_eq!(charts[1]["palette"], "categorical");
+    // The specification goes out as written: no data in it.
+    assert!(!board["charts"].to_string().contains("\"dataset\""));
+
+    assert_eq!(
+        board["queries"]["daily"]["params"]["min_magnitude"]["type"],
+        "number"
+    );
+    assert_eq!(board["queries"]["regions"]["params"], json!({}));
+    // No SQL, and no table name, reaches the browser.
+    let lower = reply.body.to_lowercase();
+    assert!(
+        !lower.contains("earthquake_events") && !lower.contains(" where "),
+        "{}",
+        reply.body
+    );
+}
+
+#[tokio::test]
+async fn an_unknown_board_is_a_404_for_the_page_and_the_definition() {
+    let server = start(BOARD, Options::default()).await;
+    for target in ["/boards/nope", "/api/boards/nope"] {
+        let reply = get(server.addr, target).await;
+        assert_eq!(reply.status, 404, "{target}");
+        assert_eq!(reply.error_code(), "not_found");
+    }
+}
+
+#[tokio::test]
+async fn the_example_queries_answer_over_the_invented_events() {
+    let server = start(BOARD, Options::default()).await;
+    let base = "/api/boards/earthquakes/queries";
+
+    let regions = get(server.addr, &format!("{base}/regions")).await.json();
+    assert_eq!(regions["rows"].as_array().unwrap().len(), 6);
+    assert_eq!(
+        regions["rows"][0],
+        json!({"value": "Aegean", "label": "Aegean"})
+    );
+
+    // Every one of the 360 events is in exactly one magnitude class of one day.
+    let daily = get(server.addr, &format!("{base}/daily")).await.json();
+    assert_eq!(
+        daily["columns"],
+        json!(["day", "Under 4", "4 to 5", "5 to 6", "6 and over"])
+    );
+    let rows = daily["rows"].as_array().unwrap();
+    assert_eq!(rows.len(), 30);
+    let total: i64 = rows
+        .iter()
+        .flat_map(|r| ["Under 4", "4 to 5", "5 to 6", "6 and over"].map(|c| r[c].as_i64().unwrap()))
+        .sum();
+    assert_eq!(total, 360);
+
+    // The trend of the hero figure: one row a day, adding up to the figure.
+    let trend = get(server.addr, &format!("{base}/events_a_day"))
+        .await
+        .json();
+    assert_eq!(trend["columns"], json!(["day", "events"]));
+    let days = trend["rows"].as_array().unwrap();
+    assert_eq!(days.len(), 30);
+    assert_eq!(
+        days.iter()
+            .map(|r| r["events"].as_i64().unwrap())
+            .sum::<i64>(),
+        360
+    );
+
+    // The filters change the numbers: one region, and strong events only.
+    let one = get(server.addr, &format!("{base}/summary?regions=Andes"))
+        .await
+        .json();
+    let andes = one["rows"][0]["events"].as_i64().unwrap();
+    assert!(andes > 0 && andes < 360, "{one}");
+    assert_eq!(one["rows"][0]["regions"], 1);
+    let strong = get(server.addr, &format!("{base}/summary?min_magnitude=6"))
+        .await
+        .json();
+    assert!(strong["rows"][0]["strongest"].as_f64().unwrap() >= 6.0);
+    // A start date past the last event leaves no day: an empty result, which the
+    // page says in words.
+    let none = get(server.addr, &format!("{base}/daily?from=2030-01-01"))
+        .await
+        .json();
+    assert_eq!(none["rows"], json!([]));
 }

@@ -22,9 +22,9 @@ use tokio_postgres::error::{ErrorPosition, SqlState};
 use tokio_postgres::types::ToSql;
 
 use crate::catalog::Catalog;
+use crate::checks;
 use crate::diagnostic::Diagnostic;
 use crate::source::child;
-use crate::vega;
 
 /// How to reach Postgres, and the limits every statement runs under.
 pub struct Settings {
@@ -147,8 +147,8 @@ impl Database {
 
     /// Prepares every compiled query inside a read-only transaction and
     /// checks what the database can tell: that the SQL is valid, that its
-    /// columns have distinct names, and that every field a chart draws is one
-    /// of them. A connection that cannot be made is one diagnostic.
+    /// columns have distinct names, and that every column a chart, a stat or a
+    /// filter names is one of them. A connection that cannot be made is one diagnostic.
     pub async fn check(&self, catalog: &Catalog) -> Vec<Diagnostic> {
         let mut diagnostics = Vec::new();
         let mut client = match self.pool.get().await {
@@ -213,27 +213,7 @@ impl Database {
                     }
                 }
                 let columns: HashSet<&str> = columns.into_iter().collect();
-                for (index, chart) in loaded.board.charts.iter().enumerate() {
-                    if chart.query != *name {
-                        continue;
-                    }
-                    let at = format!("/charts/{index}/vega_lite");
-                    let fields =
-                        vega::collect(&serde_json::Value::Object(chart.vega_lite.clone()), &at);
-                    for (pointer, field) in &fields.used {
-                        if !vega::is_known(field, &columns, &fields.created) {
-                            let mut have: Vec<&str> = columns.iter().copied().collect();
-                            have.sort_unstable();
-                            diagnostics.push(Diagnostic::new(
-                                &loaded.file,
-                                loaded.doc.line(pointer),
-                                "chart-unknown-field",
-                                format!("the chart `{}` draws the field `{field}`, which the query `{name}` does not return and no transform creates with `as`", chart.title),
-                                format!("use one of the columns ({}), or add `as: {field}` to the transform that creates it", have.join(", ")),
-                            ));
-                        }
-                    }
-                }
+                diagnostics.extend(checks::columns(loaded, name, &columns));
             }
         }
         diagnostics

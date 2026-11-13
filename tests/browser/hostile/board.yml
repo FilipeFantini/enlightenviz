@@ -1,0 +1,83 @@
+# A board over hostile data, for the browser test only (tests/browser/run.sh):
+# the rows, the option labels and the series names carry markup that would
+# run or draw something if the page treated it as HTML. The test asserts that
+# it is shown as text, everywhere. The data is in data.sql beside this file.
+board: hostile
+title: Hostile text, shown as text
+text: Invented data. If you see a picture or a bold word here, something is wrong.
+
+filters:
+  - label: Place
+    param: place
+    control: select
+    options_from: {query: places, value: value, label: label}
+  - label: Kinds
+    param: kinds
+    control: multiselect
+    options_from: {query: kinds, value: value, label: label}
+
+stats:
+  # The default place is not among the options: the control must say so.
+  - {label: "<b>In place</b>", query: in_place, value: total, format: integer}
+  - {label: Rows, query: in_kinds, value: total, format: integer}
+
+queries:
+  places:
+    sql: |
+      select place as value, place as label
+      from hostile_events
+      group by place
+      order by place
+
+  kinds:
+    sql: |
+      select kind as value, kind as label
+      from hostile_events
+      group by kind
+      order by kind
+
+  in_place:
+    sql: |
+      select coalesce(sum(n), 0) as total
+      from hostile_events
+      where place = $place
+    params:
+      place: {type: text, default: "<i>no such place</i>"}
+
+  in_kinds:
+    sql: |
+      select coalesce(sum(n), 0) as total
+      from hostile_events
+      where kind = any($kinds)
+    params:
+      kinds: {type: "list<text>", default: ["<i>alpha</i>", "<u>beta</u>"]}
+
+  by_place:
+    sql: |
+      select place, sum(n) as total, sum(n) * 2 as double
+      from hostile_events
+      where kind = any($kinds)
+      group by place
+      order by place
+    params:
+      kinds: {type: "list<text>", default: ["<i>alpha</i>", "<u>beta</u>"]}
+
+charts:
+  - title: "<b>Total</b> by place"
+    query: by_place
+    echarts:
+      tooltip: {trigger: item}
+      xAxis: {type: value}
+      yAxis: {type: category, inverse: true}
+      series:
+        - {type: bar, name: "<b>Total</b>", encode: {x: total, y: place}}
+
+  - title: Two series, with a legend
+    query: by_place
+    echarts:
+      tooltip: {trigger: axis}
+      xAxis: {type: category}
+      yAxis: {type: value}
+      series:
+        - {type: bar, name: "<img src=x onerror=1>", encode: {x: place, y: total}}
+        - {type: bar, name: "<u>Double</u>", encode: {x: place, y: double}}

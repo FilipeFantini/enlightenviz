@@ -57,7 +57,7 @@ survey; section 11 says what reverses the decision.
 The first version does exactly this, and is judged on it (section 10).
 
 - **Boards as files.** One YAML file per board: named queries, their typed
-  parameters, charts as Vega-Lite specifications bound to a query, filters
+  parameters, charts as ECharts options bound to a query, filters
   bound to parameters, text.
 - **One data source: Postgres**, through a read-only role.
 - **A server** with four kinds of route: a board's page, a query's result as
@@ -120,7 +120,8 @@ its open streams. Boards come from the image or a mounted directory.
 
 **A sketch of a board,** to be settled by the schema in v0, not by this
 document (the first slice's schema already differs: it has no `source` or
-`refresh` yet, and `docs/boards.md` is the format that is true):
+`refresh` yet, a chart's key is `echarts`, and `docs/boards.md` is the format
+that is true):
 
 ```yaml
 board: earthquakes
@@ -139,11 +140,12 @@ queries:
 charts:
   - title: Events a day
     query: by_day
-    vega_lite:
-      mark: bar
-      encoding:
-        x: {field: day, type: temporal}
-        y: {field: events, type: quantitative}
+    echarts:
+      xAxis: {type: time}
+      yAxis: {type: value}
+      series:
+        - type: bar
+          encode: {x: day, y: events}
 ```
 
 ## 6. Built for agents
@@ -212,7 +214,7 @@ choice recorded.
 | Piece | Candidate | Why |
 |---|---|---|
 | Server | Rust | One static binary, no runtime, resident memory in the tens of MiB, memory safety checked by the compiler, which also checks an agent's code before it runs. Go is the alternative if Rust slows the work. |
-| Charts | Vega-Lite or Apache ECharts, drawn in the browser; **chosen by eye** | Vega-Lite is an open, declarative grammar with a published schema, which agents write and `validate` checks well; its animation is believed weak. ECharts animates transitions and live updates by default and is harder to validate. The slice that adds the page draws the earthquakes board in both, with the house theme and a live update, and the operator picks from the result. The first slice keeps a chart's specification opaque, under the key `vega_lite`, which is renamed if ECharts wins. Either is served from the binary, not from a CDN. |
+| Charts | **Apache ECharts**, drawn in the browser | Chosen by the operator on 2026-11-13 from the same board drawn in ECharts and in Vega-Lite ([the comparison](review/chart-library/README.md)). ECharts animates a change of data by itself and runs under the strict content security policy as it is; Vega-Lite has no transitions, so the motion had to be written here, and it needs a slower interpreter mode under that policy. The cost accepted: about 100 KB more script (gzip), and a specification with no published schema, so `validate` checks the fields a chart reads and little else. Served from the binary, not from a CDN. |
 | First source | Postgres wire protocol | Covers Postgres and the databases that speak it. |
 | Later sources | ADBC, an embedded DuckDB | Open standards that reach warehouses and files without a connector written here. Not in v0. |
 | Live updates | Server-Sent Events | Plain HTTP; no second protocol for proxies to carry. |
@@ -268,3 +270,4 @@ Abandoning it is a recorded decision, not a failure to hide.
 - **dbt in v0,** 2026-11-13: none (section 7).
 - **Rust,** 2026-11-13. Go replaces it only by a recorded decision, if the
   first slice shows Rust costs more than it gives.
+- **The chart library,** 2026-11-13: Apache ECharts (section 9).

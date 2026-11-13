@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use crate::param::ParamType;
@@ -23,8 +23,8 @@ pub fn valid_name(name: &str, dash: bool) -> bool {
         && chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || (dash && c == '-'))
 }
 
-/// A dashboard: named queries, and charts that draw their results. One board
-/// is one YAML file.
+/// A dashboard: named queries, filters, figures and charts that draw their
+/// results. One board is one YAML file.
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[schemars(title = "enlightenviz board")]
@@ -39,6 +39,13 @@ pub struct Board {
     /// Optional text shown under the title.
     #[serde(default)]
     pub text: Option<String>,
+    /// The filters shown above the board, in order. Each one drives the
+    /// parameter of its name in every query that declares it.
+    #[serde(default)]
+    pub filters: Vec<Filter>,
+    /// The figures shown above the charts: one value of one query each.
+    #[serde(default)]
+    pub stats: Vec<Stat>,
     /// The queries of the board, by name. The name is part of the URL, and has
     /// the same form as the id of a board.
     #[schemars(extend("propertyNames" = {"pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,62}$"}))]
@@ -84,7 +91,124 @@ pub struct Param {
     pub max_items: Option<usize>,
 }
 
-/// A chart: a Vega-Lite specification that draws the result of a query.
+/// How a filter is drawn and what it lets the visitor choose.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum Control {
+    /// One value out of the options; for a scalar parameter.
+    Select,
+    /// Any number of the options, at least one; for a list parameter.
+    Multiselect,
+    /// A calendar date; for a `date` parameter.
+    Date,
+}
+
+/// A control above the board that sets one parameter.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Filter {
+    /// The label shown with the control.
+    pub label: String,
+    /// The parameter this filter sets, in every query that declares it.
+    pub param: String,
+    /// How the filter is drawn. It must fit the type of the parameter:
+    /// `select` for text, integer, number or boolean, `multiselect` for a
+    /// list, `date` for a date.
+    pub control: Control,
+    /// For `select` and `multiselect`: the options as a fixed list. Give this
+    /// or `options_from`, not both. A `date` filter has neither.
+    #[serde(default)]
+    pub options: Option<Vec<FilterOption>>,
+    /// For `select` and `multiselect`: take the options from a query of this
+    /// board, run once without parameters.
+    #[serde(default)]
+    pub options_from: Option<OptionsFrom>,
+}
+
+/// One fixed option of a filter.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FilterOption {
+    /// The value sent as the parameter: a quoted string for text and dates, a
+    /// number for integer and number, `true` or `false` for boolean.
+    pub value: Value,
+    /// The text shown to the visitor.
+    pub label: String,
+}
+
+/// Where the options of a filter come from.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct OptionsFrom {
+    /// A query of this board. It is run without parameters, so every
+    /// parameter it declares needs a default.
+    pub query: String,
+    /// The column that holds the value sent as the parameter.
+    pub value: String,
+    /// The column that holds the text shown to the visitor.
+    pub label: String,
+}
+
+/// How a stat's number is written.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum StatFormat {
+    /// A whole number with thousands separators: 12,345.
+    Integer,
+    /// One decimal: 5.4.
+    OneDecimal,
+    /// A short form for large numbers: 12.3K, 4.5M.
+    Compact,
+}
+
+/// A figure shown above the charts: one column of the single row a query
+/// returns.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Stat {
+    /// The label shown with the number.
+    pub label: String,
+    /// The name of the query; a key of `queries`. It must return one row.
+    pub query: String,
+    /// The column that holds the number.
+    pub value: String,
+    /// How the number is written. Without it, up to two decimals.
+    #[serde(default)]
+    pub format: Option<StatFormat>,
+    /// The headline figure of the board, drawn larger. At most one stat.
+    #[serde(default)]
+    pub hero: bool,
+    /// A small line drawn beside the number: how it came to be.
+    #[serde(default)]
+    pub trend: Option<Trend>,
+}
+
+/// The data of a stat's sparkline.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Trend {
+    /// A query of this board, which gives the points in the order they are
+    /// drawn. The filters apply to it like to any query.
+    pub query: String,
+    /// The column that orders the points (a day, say): it is not drawn.
+    pub x: String,
+    /// The column that holds the value of each point.
+    pub value: String,
+}
+
+/// Which colours a chart takes its series from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum Palette {
+    /// The eight categorical colours, in their fixed order (the default).
+    Categorical,
+    /// The four-step blue ramp, weakest to strongest, for classes that have
+    /// an order.
+    Ordered,
+}
+
+/// A chart: an Apache ECharts option that draws the result of a query. The
+/// option carries no data: the page adds the rows of the query.
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Chart {
@@ -92,10 +216,13 @@ pub struct Chart {
     pub title: String,
     /// The name of the query this chart draws; a key of `queries`.
     pub query: String,
-    /// A Vega-Lite specification, kept as it is. `validate` checks only that
-    /// every `field` it names is a column of the query, or is created by a
-    /// transform's `as`.
-    pub vega_lite: Map<String, Value>,
+    /// An Apache ECharts option, kept as it is. `validate` refuses data and
+    /// links in it, and checks that the columns `encode`, `dimensions` and
+    /// `visualMap` name are columns of the query.
+    pub echarts: Map<String, Value>,
+    /// The colours the series take: `categorical` (default) or `ordered`.
+    #[serde(default)]
+    pub palette: Option<Palette>,
 }
 
 /// The JSON Schema of a board, pretty-printed, with a trailing newline.
