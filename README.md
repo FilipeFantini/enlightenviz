@@ -108,6 +108,9 @@ Each of these is a decision to take later, not an oversight.
 - **Rate limits, and slow clients, belong to the proxy in front.** The server
   bounds its database use (pool, timeouts, row limit) but accepts any number of
   client connections and has no header or body timeouts.
+- **A client that hangs up does not cancel its query.** The statement keeps its
+  pool slot until it finishes or reaches the statement timeout; the transaction
+  is then rolled back and the connection is reused.
 - **Boards are read once, at start.** Editing a board needs a restart.
 - **The row limit is a `LIMIT`.** Postgres stops early for most plans; a plan that
   must build the whole result first (a set-returning function in `FROM`, a big

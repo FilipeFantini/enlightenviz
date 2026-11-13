@@ -30,6 +30,7 @@ use tokio_postgres::{Client, NoTls, config::Host};
 const API: &str = "tests/fixtures/api";
 const READER: (&str, &str) = ("enlightenviz_reader", "reader-test-only");
 const LOAD: (&str, &str) = ("enlightenviz_load", "load-test-only");
+const DISCONNECT: (&str, &str) = ("enlightenviz_disconnect", "disconnect-test-only");
 const WRITER: (&str, &str) = ("enlightenviz_writer", "writer-test-only");
 
 fn admin_url() -> String {
@@ -763,5 +764,71 @@ async fn connections_never_exceed_the_pool_under_load() {
     assert!(
         peak <= POOL,
         "{peak} connections were open, the pool allows {POOL}"
+    );
+}
+
+/// How many sessions of `role` are in each state, for the states named.
+async fn sessions(watcher: &Client, role: &str, state_like: &str) -> i64 {
+    watcher
+        .query_one(
+            "select count(*) from pg_stat_activity where usename = $1 and state like $2",
+            &[&role, &state_like],
+        )
+        .await
+        .unwrap()
+        .get(0)
+}
+
+#[tokio::test]
+async fn a_client_that_disconnects_mid_query_does_not_wedge_the_pool() {
+    // One connection, so whatever happens to it decides the next request.
+    let server = start(
+        API,
+        Options {
+            role: DISCONNECT,
+            pool_size: 1,
+            acquire_ms: 10_000,
+            ..Options::default()
+        },
+    )
+    .await;
+    let watcher = admin().await;
+
+    // Ask for a 2 second statement, then hang up without reading the answer.
+    let mut stream = TcpStream::connect(server.addr).await.unwrap();
+    let request = format!(
+        "GET {} HTTP/1.1\r\nhost: test\r\nconnection: close\r\n\r\n",
+        query_url("slow", "seconds=2")
+    );
+    stream.write_all(request.as_bytes()).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    drop(stream);
+    tokio::time::sleep(Duration::from_millis(400)).await;
+
+    // The statement is not cancelled: it still runs, and holds the only slot.
+    // (This is a known gap, written in the README; the test pins it so that a
+    // change to it is a decision.)
+    assert_eq!(sessions(&watcher, DISCONNECT.0, "active").await, 1);
+
+    // The next request waits for the slot, then is answered normally.
+    let started = Instant::now();
+    let reply = get(server.addr, &query_url("by_region", "region=Andes")).await;
+    assert_eq!(reply.status, 200, "{}", reply.body);
+    assert!(
+        started.elapsed() < Duration::from_secs(9),
+        "the slot was not given back in time"
+    );
+
+    // The abandoned transaction was rolled back, not left open.
+    assert_eq!(
+        sessions(&watcher, DISCONNECT.0, "idle in transaction%").await,
+        0
+    );
+    assert_eq!(sessions(&watcher, DISCONNECT.0, "active").await, 0);
+    assert_eq!(
+        get(server.addr, &query_url("by_region", "region=Andes"))
+            .await
+            .status,
+        200
     );
 }
