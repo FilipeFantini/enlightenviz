@@ -1,0 +1,19 @@
+board: prepare_fails
+title: Statements Postgres refuses
+queries:
+  unknown_table:
+    sql: select * from no_such_table
+  syntax:
+    sql: |
+      select day,
+             from earthquakes_daily
+  insert:
+    sql: insert into earthquakes_daily (day, region, events, max_magnitude) values ('2030-01-01', 'x', 1, 1.0) returning day
+  with_delete:
+    sql: |
+      with gone as (delete from earthquakes_daily returning day)
+      select day from gone
+charts:
+  - title: A
+    query: unknown_table
+    vega_lite: {mark: point}

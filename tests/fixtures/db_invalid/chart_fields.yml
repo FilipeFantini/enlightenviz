@@ -1,0 +1,22 @@
+board: chart_fields
+title: Chart fields
+queries:
+  a:
+    sql: select day, events from earthquakes_daily
+charts:
+  - title: Known fields, including one a transform creates
+    query: a
+    vega_lite:
+      mark: bar
+      transform:
+        - {calculate: "datum.events * 2", as: double}
+      encoding:
+        x: {field: day, type: temporal}
+        y: {field: double, type: quantitative}
+  - title: A field the query does not return
+    query: a
+    vega_lite:
+      mark: bar
+      encoding:
+        x: {field: day, type: temporal}
+        y: {field: event_count, type: quantitative}

@@ -1,0 +1,39 @@
+# The board the HTTP tests run against; the data is in examples/earthquakes.
+board: api
+title: API tests
+queries:
+  by_region:
+    sql: |
+      select day, events
+      from earthquakes_daily
+      where region = $region and day >= $from
+      order by day
+    params:
+      region: {type: text}
+      from: {type: date, default: "2024-01-01"}
+  echo:
+    sql: select $text as text, $number as number, $flag as flag, $date as date, $items as items
+    params:
+      text: {type: text}
+      number: {type: number}
+      flag: {type: boolean}
+      date: {type: date}
+      items: {type: "list<integer>", max_items: 3}
+  slow:
+    sql: select 1 as one from pg_sleep($seconds)
+    params:
+      seconds: {type: number}
+  many:
+    sql: select n from generate_series(1, $count) as n
+    params:
+      count: {type: integer}
+  column_named_like_the_alias:
+    sql: select 7 as q
+charts:
+  - title: Events
+    query: by_region
+    vega_lite:
+      mark: line
+      encoding:
+        x: {field: day, type: temporal}
+        y: {field: events, type: quantitative}

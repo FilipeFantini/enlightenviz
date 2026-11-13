@@ -1,0 +1,9 @@
+board: twin
+title: First
+queries:
+  a:
+    sql: select 1 as one
+charts:
+  - title: A
+    query: a
+    vega_lite: {mark: point}

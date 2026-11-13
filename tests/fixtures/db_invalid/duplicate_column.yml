@@ -1,0 +1,12 @@
+board: duplicate_column
+title: Two columns with one name
+queries:
+  a:
+    sql: select day as x, events as x from earthquakes_daily
+charts:
+  - title: A
+    query: a
+    vega_lite:
+      mark: point
+      encoding:
+        x: {field: x, type: quantitative}

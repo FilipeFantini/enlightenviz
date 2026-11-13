@@ -1,0 +1,15 @@
+board: sql_shape
+title: SQL shape
+queries:
+  unterminated:
+    sql: select 'never closed as one
+  two_statements:
+    sql: |
+      select 1 as one;
+      select 2 as two
+  empty:
+    sql: "-- only a comment"
+charts:
+  - title: A
+    query: empty
+    vega_lite: {mark: point}

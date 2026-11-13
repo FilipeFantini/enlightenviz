@@ -1,0 +1,6 @@
+board: schema_no_charts
+title: No charts
+queries:
+  a:
+    sql: select 1 as one
+charts: []

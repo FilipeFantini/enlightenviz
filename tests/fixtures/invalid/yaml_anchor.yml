@@ -1,0 +1,10 @@
+board: yaml_anchor
+title: Anchors
+queries:
+  a: &shared
+    sql: select 1 as one
+  b: *shared
+charts:
+  - title: A
+    query: a
+    vega_lite: {mark: point}

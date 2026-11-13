@@ -1,0 +1,10 @@
+# Same id as duplicate_a.yml.
+board: twin
+title: Second
+queries:
+  a:
+    sql: select 1 as one
+charts:
+  - title: A
+    query: a
+    vega_lite: {mark: point}

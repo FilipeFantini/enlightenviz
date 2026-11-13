@@ -1,0 +1,14 @@
+# A query that writes, through a function. It prepares, and only the
+# read-only transaction stops it.
+board: writes
+title: Writes
+queries:
+  bump:
+    sql: select scratch_bump() as bumped
+charts:
+  - title: Bumped
+    query: bump
+    vega_lite:
+      mark: point
+      encoding:
+        x: {field: bumped, type: quantitative}
